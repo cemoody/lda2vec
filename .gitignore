@@ -1,0 +1,14 @@
+*~
+*.egg/
+*.pyc
+*.pyo
+*.cpp
+*.so
+build
+\#*\#
+.\#*
+.coverage
+.eggs/
+*.egg-info/
+dist/
+htmlcov/

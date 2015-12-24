@@ -1,0 +1,63 @@
+import numpy as np
+
+import chainer
+import chainer.links as L
+import chainer.functions as F
+from chainer import Variable
+
+
+class EmbedMixture(chainer.Chain):
+
+    """ A single document is encoded as a multinomial mixture of latent topics.
+    The mixture is defined on simplex, so that mixture weights always sum
+    to 100%. The latent topic vectors resemble word vectors whose elements are
+    defined over all real numbers.
+
+    For example, a single document mix may be [0.9, 0.1], indicating that
+    it is 90% in the first topic, 10% in the second. An example topic vector
+    looks like [1.5e1, -1.3e0, +3.4e0, -0.2e0], which is largely
+    uninterpretable until you measure the words most similar to this topic
+    vector.
+
+    Args:
+        n_documents (int): Total number of documents
+        n_topics (int): Number of topics per document
+        n_dim (int): Number of dimensions per topic vector (should match word
+            vector size)
+
+    Attributes:
+        weights (~chainer.links.EmbedID): Unnormalized topic weights. To
+            normalize these weights, use `F.softmax(weights)`.
+        factors (~chainer.links.Parameter): Topic vector matrix.
+    """
+
+    def __init__(self, n_documents, n_topics, n_dim):
+        self.n_documents = n_documents
+        self.n_topics = n_topics
+        self.n_dim = n_dim
+        factors = np.random.randn(n_topics, n_dim).astype('float32')
+        factors /= np.sqrt(n_topics + n_dim)
+        self.all_docs = Variable(np.arange(n_documents).astype('int32'))
+        super(EmbedMixture, self).__init__(
+            weights=L.EmbedID(n_documents, n_topics),
+            factors=L.Parameter(factors))
+        self.weights.W.data[...] /= np.sqrt(n_documents + n_topics)
+
+    def to_gpu(self):
+        self.all_docs.to_gpu()
+        super(EmbedMixture, self).to_gpu()
+
+    def to_cpu(self):
+        self.all_docs.to_cpu()
+        super(EmbedMixture, self).to_cpu()
+
+    def __call__(self, doc_ids):
+        """
+        """
+        # (batchsize, ) --> (batchsize, logweights)
+        w = self.weights(doc_ids)
+        # (batchsize, logweights) --> (batchsize, multinomial)
+        multi = F.softmax(w)
+        # (batchsize, n_factors) * (n_factors, n_dim) --> (batchsize, n_dim)
+        w_sum = F.matmul(multi, self.factors())
+        return w_sum
