@@ -19,6 +19,11 @@ class EmbedMixture(chainer.Chain):
     uninterpretable until you measure the words most similar to this topic
     vector.
 
+    :math:`e=\Sigma_{j=0}^{j=n\_topics} c_j \cdot \vec{T_j}`
+
+    This is usually paired with regularization on the weights `c_j`. If using
+    a Dirichlet prior with low alpha, these weights will be sparse.
+
     Args:
         n_documents (int): Total number of documents
         n_topics (int): Number of topics per document
@@ -26,9 +31,12 @@ class EmbedMixture(chainer.Chain):
             vector size)
 
     Attributes:
-        weights (~chainer.links.EmbedID): Unnormalized topic weights. To
-            normalize these weights, use `F.softmax(weights)`.
-        factors (~chainer.links.Parameter): Topic vector matrix.
+        weights (~chainer.links.EmbedID): Unnormalized topic weights
+            (:math:`c_j`). To normalize these weights, use
+            `F.softmax(weights)`.
+        factors (~chainer.links.Parameter): Topic vector matrix (:math:`T_j`)
+
+    .. seealso:: :func:`lda2vec.dirichlet_likelihood`
     """
 
     def __init__(self, n_documents, n_topics, n_dim):
@@ -52,7 +60,16 @@ class EmbedMixture(chainer.Chain):
         super(EmbedMixture, self).to_cpu()
 
     def __call__(self, doc_ids):
-        """
+        """ Given an array of document integer indices, returns a vector
+        for each document. The vector is composed of topic weights projected
+        onto topic vectors.
+
+        Args:
+            doc_ids (~chainer.Variable): One-dimensional batch vectors of IDs
+
+        Returns:
+            ~chainer.Variable: Batch of two-dimensional embeddings for every
+                document.
         """
         # (batchsize, ) --> (batchsize, logweights)
         w = self.weights(doc_ids)
