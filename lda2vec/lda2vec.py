@@ -13,11 +13,12 @@ from lda2vec import dirichlet_likelihood
 
 
 class lda2vec(chainer.Chain):
+    component_names = []
     _loss_types = ['sigmoid_cross_entropy', 'softmax_cross_entropy',
                    'hinge', 'mean_squared_error']
 
-    def __init__(self, n_words, n_sent_length, n_hidden, counts, contexts=None,
-                 targets=None, n_samples=20, grad_clip=5.0, gpu=0):
+    def __init__(self, n_words, n_sent_length, n_hidden, counts,
+                 n_samples=20, grad_clip=5.0, gpu=0):
         """ LDA-like model with multiple contexts and supervised labels.
         In the LDA generative model words are sampled from a topic vector.
         In this model, words are drawn from a combination of contexts not
@@ -29,30 +30,33 @@ class lda2vec(chainer.Chain):
             n_hidden (int): Number of dimensions in a word vector.
             counts (dict): A dictionary with keys as word indices and values
                 as counts for that word index.
-            contexts (list of numpy int arrays): Each categorical context
         """
         self.n_words = n_words
         self.n_sent_length = n_sent_length
         self.n_hidden = n_hidden
         self.n_samples = n_samples
-        if contexts is None:
-            contexts = []
-        if targets is None:
-            targets = []
-        self.components = {}
-        self.targets = {}
-        for j, context in enumerate(contexts):
-            self.components['component_%02i' % j] = EmbedMixture(*contexts)
-        self.links = {}
-        for j, target in enumerate(targets):
-            loss_type = target.pop('type')
-            assert loss_type in self._loss_types
-            func = getattr(chainer.functions, loss_type)
-            name = 'target_%02i' % j
-            self.targets[name] = func
         self.xp = cuda.cupy if gpu >= 0 else np
         self.loss_func = L.NegativeSampling(n_hidden, counts, n_samples)
         self.grad_clip = grad_clip
+
+    def add_component(self, n_documents, n_topics, loss_type=None,
+                      n_target_out=None, name=None):
+        em = EmbedMixture(n_documents, n_topics, self.n_hidden)
+        transform, loss_func = None, None
+        if loss_type is not None:
+            transform = L.Linear(n_topics, n_target_out)
+            assert loss_type in self._loss_types
+            loss_func = getattr(chainer.functions, loss_type)
+        self.components[name] = (em, transform, loss_func)
+
+    def initialize(self):
+        kwargs = dict(vocab=L.EmbedID(self.n_vocab, self.n_hidden))
+        for name, (em, transform, lf) in zip(self.components.items()):
+            kwargs[name + '_mixture'] = em
+            kwargs[name + '_linear'] = transform
+            self.component_names.append(name + '_mixture')
+        super(lda2vec, self).__init__(**kwargs)
+        self._setup()
 
     def _setup(self):
         optimizer = optimizers.Adam()
@@ -63,17 +67,16 @@ class lda2vec(chainer.Chain):
 
     def _context(self, contexts):
         """ For every context calculate and sum the embedding."""
-        components = self.components.keys()
         context = None
-        for component, context in zip(components, contexts):
-            e = self[component](context)
+        for component_name, context in zip(self.component_names, contexts):
+            e = self[component_name](context)
             context = e if context is None else context + e
         return context
 
     def _priors(self, contexts):
         """ Measure likelihood of seeing topic proportions"""
         loss = None
-        for component in zip(self.components.keys()):
+        for component in self.component_names:
             dl = dirichlet_likelihood(self[component].weights)
             loss = dl if loss is None else dl + loss
         return loss
