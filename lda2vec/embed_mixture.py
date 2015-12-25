@@ -45,19 +45,10 @@ class EmbedMixture(chainer.Chain):
         self.n_dim = n_dim
         factors = np.random.randn(n_topics, n_dim).astype('float32')
         factors /= np.sqrt(n_topics + n_dim)
-        self.all_docs = Variable(np.arange(n_documents).astype('int32'))
         super(EmbedMixture, self).__init__(
             weights=L.EmbedID(n_documents, n_topics),
             factors=L.Parameter(factors))
         self.weights.W.data[...] /= np.sqrt(n_documents + n_topics)
-
-    def to_gpu(self):
-        self.all_docs.to_gpu()
-        super(EmbedMixture, self).to_gpu()
-
-    def to_cpu(self):
-        self.all_docs.to_cpu()
-        super(EmbedMixture, self).to_cpu()
 
     def __call__(self, doc_ids):
         """ Given an array of document integer indices, returns a vector
