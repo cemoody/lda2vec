@@ -41,6 +41,14 @@ class lda2vec(chainer.Chain):
 
     def add_component(self, n_documents, n_topics, loss_type=None,
                       n_target_out=None, name=None):
+        """ Add a component to the context. Optionally make it a
+        supervised component.
+
+        Args:
+            n_documents (int): Number of total documents.
+            n_topics (int): Number of topics for this component.
+            loss_type (str): 
+        """
         em = EmbedMixture(n_documents, n_topics, self.n_hidden)
         transform, loss_func = None, None
         if loss_type is not None:
