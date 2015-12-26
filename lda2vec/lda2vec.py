@@ -47,7 +47,9 @@ class lda2vec(chainer.Chain):
         Args:
             n_documents (int): Number of total documents.
             n_topics (int): Number of topics for this component.
-            loss_type (str): 
+            loss_type (str): String representing a chainer loss function.
+                Must be in ['sigmoid_cross_entropy', 'softmax_cross_entropy',
+                            'hinge', 'mean_squared_error']
         """
         em = EmbedMixture(n_documents, n_topics, self.n_hidden)
         transform, loss_func = None, None
