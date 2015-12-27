@@ -12,7 +12,7 @@ from lda2vec import EmbedMixture
 from lda2vec import dirichlet_likelihood
 
 
-class lda2vec(chainer.Chain):
+class LDA2Vec(chainer.Chain):
     component_names = []
     _loss_types = ['sigmoid_cross_entropy', 'softmax_cross_entropy',
                    'hinge', 'mean_squared_error']
@@ -30,7 +30,19 @@ class lda2vec(chainer.Chain):
             n_hidden (int): Number of dimensions in a word vector.
             counts (dict): A dictionary with keys as word indices and values
                 as counts for that word index.
+
+        >>> from lda2vec import LDA2Vec
+        >>> n_words = 10
+        >>> n_docs = 15
+        >>> n_sent_length = 5
+        >>> n_hidden = 8
+        >>> words = np.random.randint(n_words, size=(n_docs, n_sent_length))
+        >>> _, counts = np.unique(words, return_counts=True)
+        >>> model = LDA2Vec(n_words, n_sent_length, n_hidden, counts)
+        >>> model.fit_partial(words, 1.0)
         """
+        self.counts = counts
+        self.frequency = counts / np.sum(counts)
         self.n_words = n_words
         self.n_sent_length = n_sent_length
         self.n_hidden = n_hidden
@@ -65,7 +77,7 @@ class lda2vec(chainer.Chain):
             kwargs[name + '_mixture'] = em
             kwargs[name + '_linear'] = transform
             self.component_names.append(name + '_mixture')
-        super(lda2vec, self).__init__(**kwargs)
+        super(LDA2Vec, self).__init__(**kwargs)
         self._setup()
 
     def _setup(self):
@@ -113,6 +125,9 @@ class lda2vec(chainer.Chain):
             losses = l if losses is None else losses + l
         return losses
 
+    def _prune_rare(self, word_matrix):
+        return word_matrix
+
     def fit_partial(self, word_matrix, fraction, contexts=None, targets=None):
         """ Train the latent document-to-topic weights, topic vectors,
         and word vectors on partial subset of the full data.
@@ -133,10 +148,20 @@ class lda2vec(chainer.Chain):
         assert len(targets) == len(self.targets)
         contexts = [Variable(c.astype('int32')) for c in contexts]
         context = self._context(contexts)
+        word_matrix_pruned = self._prune_rare(word_matrix.astype('int32'))
         prior_loss = self._priors(contexts)
-        words_loss = self._unigram(context, word_matrix.astype('int32'))
+        words_loss = self._unigram(context, word_matrix_pruned)
         trget_loss = self._target(contexts, targets)
         total_loss = prior_loss * fraction + words_loss + trget_loss
         self.zerograds()
         total_loss.backward()
         self._optimizer.update()
+
+    def term_topics(self, component):
+        data = {'topic_term_dists': None,  # phi, [n_topics, n_words]
+                'doc_topic_dists': None,  # theta, [n_docs, n_topics]
+                'doc_lengths': None,
+                'vocab': None,
+                'term_frequency': None
+                }
+        return data
