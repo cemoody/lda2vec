@@ -1,4 +1,4 @@
-from lda2vec import LDA2Vec
+from ..lda2vec.lda2vec import LDA2Vec
 import numpy as np
 
 
@@ -10,6 +10,7 @@ def test_no_component():
     words = np.random.randint(n_words, size=(n_docs, n_sent_length))
     _, counts = np.unique(words, return_counts=True)
     model = LDA2Vec(n_words, n_sent_length, n_hidden, counts)
+    # Test perplexity decreases
     model.fit_partial(words, 1.0)
 
 
@@ -24,6 +25,7 @@ def test_single_component():
     _, counts = np.unique(words, return_counts=True)
     model = LDA2Vec(n_words, n_sent_length, n_hidden, counts)
     model.add_component(n_docs, n_topics)
+    # Test perplexity decreases
     model.fit_partial(words, 1.0, contexts=[doc_ids])
 
 

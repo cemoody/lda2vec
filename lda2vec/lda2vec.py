@@ -8,14 +8,15 @@ from chainer import cuda
 from chainer import optimizers
 from chainer import Variable
 
-from lda2vec import EmbedMixture
-from lda2vec import dirichlet_likelihood
+from embed_mixture import EmbedMixture
+from dirichlet_likelihood import dirichlet_likelihood
 
 
 class LDA2Vec(chainer.Chain):
     component_names = []
     _loss_types = ['sigmoid_cross_entropy', 'softmax_cross_entropy',
                    'hinge', 'mean_squared_error']
+    _initialized = False
 
     def __init__(self, n_words, n_sent_length, n_hidden, counts,
                  n_samples=20, grad_clip=5.0, gpu=0):
