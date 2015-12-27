@@ -1,7 +1,7 @@
 import numpy as np
 from chainer import Variable
 
-from ..lda2vec.dirichlet_likelihood import dirichlet_likelihood
+from lda2vec import dirichlet_likelihood
 
 
 def test_concentration():

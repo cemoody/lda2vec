@@ -1,4 +1,4 @@
-from ..lda2vec.lda2vec import LDA2Vec
+from lda2vec import LDA2Vec
 import numpy as np
 
 

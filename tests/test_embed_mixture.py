@@ -1,7 +1,7 @@
 import numpy as np
 from chainer import Variable
 
-from ..lda2vec.embed_mixture import EmbedMixture
+from lda2vec import EmbedMixture
 
 
 def softmax(v):
