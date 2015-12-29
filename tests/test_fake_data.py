@@ -32,7 +32,7 @@ def test_fake_data():
     n_words = 10
     n_hidden = 2
     n_sent_length = 5
-    data = fake_data.fake_data(n_docs, n_words, n_hidden, n_sent_length)
+    data = fake_data.fake_data(n_docs, n_words, n_sent_length, n_hidden)
     assert data.dtype == np.dtype('int32')
     assert data.shape[0] == n_docs
     assert data.shape[1] == n_sent_length

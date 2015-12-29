@@ -35,7 +35,7 @@ def sample(values, probabilities, size):
     return values[np.digitize(random_sample(size), bins)]
 
 
-def fake_data(n_docs, n_words, n_hidden, n_sent_length):
+def fake_data(n_docs, n_words, n_sent_length, n_hidden):
     # These are log ratios for the doc & word topics
     doc_topics = orthogonal_matrix([n_docs, n_hidden])
     wrd_topics = orthogonal_matrix([n_hidden, n_words])

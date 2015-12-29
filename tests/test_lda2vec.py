@@ -1,4 +1,5 @@
 from lda2vec import LDA2Vec
+from lda2vec import fake_data
 import numpy as np
 
 # TODO: Test for component w/ & w/o loss type
@@ -10,9 +11,9 @@ import numpy as np
 
 
 def generate(n_docs=300, n_words=10, n_sent_length=5, n_hidden=8):
-    words = np.random.randint(n_words, size=(n_docs, n_sent_length))
+    words = fake_data.fake_data(n_docs, n_words, n_sent_length, n_hidden)
     _, counts = np.unique(words, return_counts=True)
-    model = LDA2Vec(n_words, n_sent_length, n_hidden, counts)
+    model = LDA2Vec(n_words, n_sent_length, n_hidden, counts, n_samples=1)
     return model, words
 
 
@@ -32,7 +33,7 @@ def test_compute_perplexity():
     assert diff < 1e-3, msg
 
 
-def component(model, words, name=None, n_comp=1, itrs=3):
+def component(model, words, name=None, n_comp=1, itrs=5):
     n_topics = 2
     n_docs = words.shape[0]
     model, words = generate()
