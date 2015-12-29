@@ -97,6 +97,7 @@ class LDA2Vec(chainer.Chain):
         loss_func = L.NegativeSampling(self.n_hidden, self.counts,
                                        self.n_samples)
         data = np.random.randn(len(self.counts), self.n_hidden)
+        data /= np.sqrt(np.prod(data.shape))
         loss_func.W.data[:] = data[:].astype('float32')
         kwargs = dict(vocab=L.EmbedID(self.n_words, self.n_hidden),
                       loss_func=loss_func)
@@ -201,8 +202,9 @@ class LDA2Vec(chainer.Chain):
         context = self._context(components)
         n_words = np.prod(word_matrix.shape)
         prob = F.softmax(F.matmul(context, F.transpose(self.loss_func.W)))
-        perp = prob / n_words
-        return F.log(F.sum(perp))
+        # http://qpleple.com/perplexity-to-evaluate-topic-models/
+        log_perp = -F.sum(F.log(prob)) / n_words
+        return log_perp
 
     def fit_partial(self, word_matrix, fraction, components=None,
                     targets=None):
