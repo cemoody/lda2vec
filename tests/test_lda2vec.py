@@ -16,12 +16,26 @@ def generate(n_docs=300, n_words=10, n_sent_length=5, n_hidden=8):
     return model, words
 
 
+def test_compute_perplexity():
+    model, words = generate()
+    n_docs = words.shape[0]
+    n_wrds = words.max() + 1
+    n_obs = np.prod(words.shape)
+    doc_ids = np.arange(n_docs)
+    log_perp = model.compute_log_perplexity(words, components=[doc_ids])
+    log_prob = np.log(1.0 / n_wrds)
+    theoretical = log_prob / n_obs
+    msg = "Initial log perplexity is significantly different from uniform"
+    diff = np.abs(log_perp - theoretical) / theoretical
+    assert diff < 1e-3, msg
+
+
 def component(model, words, name=None, n_comp=1):
     n_topics = 2
     n_docs = words.shape[0]
     doc_ids = np.arange(n_docs)
     model = generate()
-    perp_orig = model.calculate_log_perplexity(words, components=[doc_ids])
+    perp_orig = model.compute_log_perplexity(words, components=[doc_ids])
     for j in range(n_comp):
         if name:
             name += str(j)
@@ -52,16 +66,3 @@ def test_multiple_components_no_names():
 def test_multiple_components_named():
     model, words = generate()
     component(model, words, name="named_layer", n_comp=2)
-
-
-def test_compute_perplexity():
-    model, words = generate()
-    n_docs = words.shape[0]
-    n_wrds = words.max() + 1
-    n_obs = np.prof(words.data.shape)
-    doc_ids = np.arange(n_docs)
-    log_perp = model.compute_log_perplexity(words, components=[doc_ids])
-    log_prob = np.log(1.0 / n_wrds)
-    theoretical = log_prob / n_obs
-    msg = "Initial log perplexity is significantly different from uniform"
-    assert log_perp < theoretical, msg
