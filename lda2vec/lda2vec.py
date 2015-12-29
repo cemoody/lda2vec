@@ -22,8 +22,10 @@ class LDA2Vec(chainer.Chain):
         """ LDA-like model with multiple contexts and supervised labels.
         In the LDA generative model words are sampled from a topic vector.
         In this model, words are drawn from a combination of contexts not
-        limited to a single source. Each context can also be supervised
-        and predictive.
+        limited to a single source. The objective function is then similar
+        to that of word2vec, where the context is changed from a single pivot
+        word to have a structure imposed by the researcher. Each context
+        can then also be supervised and predictive.
 
         Args:
             n_sent_length (int): Maximum number of words per sentence.
@@ -127,12 +129,12 @@ class LDA2Vec(chainer.Chain):
             loss = dl if loss is None else dl + loss
         return loss
 
-    def _unigram(self, context, words):
+    def _unigram(self, context, words, **kwargs):
         """ Given context, predict words."""
         total_loss = None
         for column in six.moves.range(self.n_sent_length):
             target = Variable(self._xp.asarray(words[:, column]))
-            loss = self.loss_func(context, target)
+            loss = self.loss_func(context, target, **kwargs)
             total_loss = loss if total_loss is None else total_loss + loss
         return total_loss
 
@@ -160,8 +162,45 @@ class LDA2Vec(chainer.Chain):
             losses = 0.0
         return losses
 
-    def _prune_rare(self, word_matrix):
-        return word_matrix
+    def _check_input(self, word_matrix, components, targets):
+        word_matrix = word_matrix.astype('int32')
+        if self._initialized is False:
+            self.initialize()
+        if components is None:
+            components = []
+        else:
+            msg = "Number of components not equal to initialized components"
+            assert len(components) == len(self.components), msg
+            components = [Variable(self._xp.asarray(c.astype('int32')))
+                          for c in components]
+        if targets is None:
+            targets = []
+        else:
+            msg = "Number of targets not equal to initialized no. of targets"
+            vals = self.components.values()
+            assert len(targets) == sum([c[2] is not None for c in vals])
+        return word_matrix, components, targets
+
+    def compute_log_perplexity(self, word_matrix, components=None):
+        """ Compute the log perplexity given the components and a validation
+        set of words.
+
+        :math:`log\_perplexity=\Sigma_d p(w_d) / N`
+
+        With negative sampling we set the number of negative samples
+        so that :math:`p(w_d)=\sigma(x^\\top w_p)`
+        """
+        word_matrix, components, targets = self._check_input(word_matrix,
+                                                             components,
+                                                             None)
+        context = self._context(components)
+        sample_size = self.loss_func.sample_size
+        self.loss_func.sample_size = 0
+        log_prob = self._unigram(context, word_matrix)
+        self.loss_func.sample_size = sample_size
+        n_words = np.prod(word_matrix.data.shape)
+        log_perp = log_prob / n_words
+        return log_perp
 
     def fit_partial(self, word_matrix, fraction, components=None,
                     targets=None):
@@ -174,21 +213,14 @@ class LDA2Vec(chainer.Chain):
                 sentence, nth column is the nth word in that sentence.
             fraction (float): Fraction of all words this subset represents.
         """
-        word_matrix = word_matrix.astype('int32')
-        if self._initialized is False:
-            self.initialize()
-        if components is None:
-            components = []
-        if targets is None:
-            targets = []
-        msg = "Number of components not equal to initialized components"
-        assert len(components) == len(self.components), msg
-        msg = "Number of targets not equal to initialized number of targets"
-        vals = self.components.values()
-        assert len(targets) == sum([c[2] is not None for c in vals])
-        components = [Variable(self._xp.asarray(c.astype('int32')))
-                      for c in components]
+        word_matrix, components, targets = self._check_input(word_matrix,
+                                                             components,
+                                                             targets)
         context = self._context(components)
+        self._fit_partial(context, components, word_matrix, targets, fraction)
+
+    def _fit_partial(self, context, components, word_matrix, targets,
+                     fraction):
         # word_matrix_pruned = self._prune_rare(word_matrix.astype('int32'))
         prior_loss = self._priors(context)
         words_loss = self._unigram(context, word_matrix)
@@ -201,7 +233,7 @@ class LDA2Vec(chainer.Chain):
         self.zerograds()
         # Calculate back gradients
         total_loss.backward()
-        # Propogate gradients
+        # Propagate gradients
         self._optimizer.update()
 
     def term_topics(self, component):

@@ -3,7 +3,6 @@ import numpy as np
 import chainer
 import chainer.links as L
 import chainer.functions as F
-from chainer import Variable
 
 
 class EmbedMixture(chainer.Chain):
