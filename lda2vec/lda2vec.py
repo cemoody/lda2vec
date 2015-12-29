@@ -191,10 +191,11 @@ class LDA2Vec(chainer.Chain):
         """ Compute the log perplexity given the components and a validation
         set of words.
 
-        :math:`log\_perplexity=\Sigma_d p(w_d) / N`
+        :math:`log\_perplexity=\frac{-\Sigma_d log(p(w_d))}{N}`
 
-        With negative sampling we set the number of negative samples
-        so that :math:`p(w_d)=\sigma(x^\\top w_p)`
+        We ignore the negative sampling part of the objective and focus on
+        the positive component to rpedict perplexity:
+        :math:`p(w_d)=\sigma(x^\\top w_p)`
         """
         word_matrix, components, targets = self._check_input(word_matrix,
                                                              components,
@@ -235,6 +236,8 @@ class LDA2Vec(chainer.Chain):
         total_loss.backward()
         # Propagate gradients
         self._optimizer.update()
+        self.logger.info("Partial fit loss: %1.1e" % total_loss.data)
+        return total_loss
 
     def term_topics(self, component):
         data = {'topic_term_dists': None,  # phi, [n_topics, n_words]
