@@ -35,18 +35,19 @@ def test_compute_perplexity():
 def component(model, words, name=None, n_comp=1):
     n_topics = 2
     n_docs = words.shape[0]
-    doc_ids = np.arange(n_docs)
-    model = generate()
-    perp_orig = model.compute_log_perplexity(words, components=[doc_ids])
+    model, words = generate()
+    components = []
     for j in range(n_comp):
         if name:
             name += str(j)
         model.add_component(n_docs, n_topics, name=name)
+        components.append(np.arange(n_docs).astype('int32'))
+    perp_orig = model.compute_log_perplexity(words, components=components)
     # Test perplexity decreases
-    model.fit_partial(words, 1.0, components=[doc_ids])
-    perp_fit = model.compute_log_perplexity(words, components=[doc_ids])
+    model.fit_partial(words, 1.0, components=components)
+    perp_fit = model.compute_log_perplexity(words, components=components)
     msg = "Perplexity should improve with a fit model"
-    assert perp_fit < perp_orig, msg
+    assert perp_fit.data < perp_orig.data, msg
     del model
 
 

@@ -60,9 +60,6 @@ class LDA2Vec(chainer.Chain):
         else:
             self._xp = np
             self.logger.info("Using NumPy on the CPU")
-        self.loss_func = L.NegativeSampling(n_hidden, counts, n_samples)
-        data = np.random.randn(len(counts), n_hidden).astype('float32')
-        self.loss_func.W.data[:] = data[:]
         self.grad_clip = grad_clip
         self.components = {}
         self.component_names = []
@@ -97,7 +94,12 @@ class LDA2Vec(chainer.Chain):
         self.component_names.append(name)
 
     def initialize(self):
-        kwargs = dict(vocab=L.EmbedID(self.n_words, self.n_hidden))
+        loss_func = L.NegativeSampling(self.n_hidden, self.counts,
+                                       self.n_samples)
+        data = np.random.randn(len(self.counts), self.n_hidden)
+        loss_func.W.data[:] = data[:].astype('float32')
+        kwargs = dict(vocab=L.EmbedID(self.n_words, self.n_hidden),
+                      loss_func=loss_func)
         for name, (em, transform, lf) in self.components.items():
             kwargs[name + '_mixture'] = em
             if transform is not None:
@@ -217,10 +219,6 @@ class LDA2Vec(chainer.Chain):
                                                              components,
                                                              targets)
         context = self._context(components)
-        self._fit_partial(context, components, word_matrix, targets, fraction)
-
-    def _fit_partial(self, context, components, word_matrix, targets,
-                     fraction):
         # word_matrix_pruned = self._prune_rare(word_matrix.astype('int32'))
         prior_loss = self._priors(context)
         words_loss = self._unigram(context, word_matrix)
