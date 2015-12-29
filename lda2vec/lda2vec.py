@@ -1,9 +1,9 @@
 import numpy as np
 import six
+import logging
 
 import chainer
 import chainer.links as L
-
 from chainer import cuda
 from chainer import optimizers
 from chainer import Variable
@@ -13,13 +13,12 @@ from dirichlet_likelihood import dirichlet_likelihood
 
 
 class LDA2Vec(chainer.Chain):
-    component_names = []
     _loss_types = ['sigmoid_cross_entropy', 'softmax_cross_entropy',
                    'hinge', 'mean_squared_error']
     _initialized = False
 
     def __init__(self, n_words, n_sent_length, n_hidden, counts,
-                 n_samples=20, grad_clip=5.0, gpu=0):
+                 n_samples=20, grad_clip=5.0, gpu=None, logging_level=0):
         """ LDA-like model with multiple contexts and supervised labels.
         In the LDA generative model words are sampled from a topic vector.
         In this model, words are drawn from a combination of contexts not
@@ -42,20 +41,32 @@ class LDA2Vec(chainer.Chain):
         >>> model = LDA2Vec(n_words, n_sent_length, n_hidden, counts)
         >>> model.fit_partial(words, 1.0)
         """
+        self.logger = logging.getLogger()
+        self.logger.setLevel(logging_level)
+        self.logger.info("Setup LDA2Vec class")
+
         self.counts = counts
         self.frequency = counts / np.sum(counts)
         self.n_words = n_words
         self.n_sent_length = n_sent_length
         self.n_hidden = n_hidden
         self.n_samples = n_samples
-        self.xp = cuda.cupy if gpu >= 0 else np
+        if gpu >= 0:
+            self._xp = cuda.cupy
+            self.logger.info("Using CUPY on the GPU")
+        else:
+            self._xp = np
+            self.logger.info("Using NumPy on the CPU")
         self.loss_func = L.NegativeSampling(n_hidden, counts, n_samples)
         self.grad_clip = grad_clip
+        self.components = {}
+        self.component_names = []
 
     def add_component(self, n_documents, n_topics, loss_type=None,
                       n_target_out=None, name=None):
-        """ Add a component to the context. Optionally make it a
-        supervised component.
+        """ Add a component to the context. You must add components in the
+        order in which they'll appear when `fit` is called. Optionally make
+        it a supervised component.
 
         Args:
             n_documents (int): Number of total documents.
@@ -66,20 +77,30 @@ class LDA2Vec(chainer.Chain):
         """
         em = EmbedMixture(n_documents, n_topics, self.n_hidden)
         transform, loss_func = None, None
+        if name is None:
+            name = "comp_%0i" % (len(self.components))
         if loss_type is not None:
             transform = L.Linear(n_topics, n_target_out)
             assert loss_type in self._loss_types
+            assert loss_type in dir(chainer.functions)
             loss_func = getattr(chainer.functions, loss_type)
+            self.logger.info("Added component %s with loss function %s" %
+                             (name, loss_type))
+        else:
+            self.logger.info("Added component %s" % name)
         self.components[name] = (em, transform, loss_func)
+        self.component_names.append(name)
 
     def initialize(self):
-        kwargs = dict(vocab=L.EmbedID(self.n_vocab, self.n_hidden))
-        for name, (em, transform, lf) in zip(self.components.items()):
+        kwargs = dict(vocab=L.EmbedID(self.n_words, self.n_hidden))
+        for name, (em, transform, lf) in self.components.items():
             kwargs[name + '_mixture'] = em
-            kwargs[name + '_linear'] = transform
-            self.component_names.append(name + '_mixture')
+            if transform is not None:
+                kwargs[name + '_linear'] = transform
         super(LDA2Vec, self).__init__(**kwargs)
         self._setup()
+        self._initialized = True
+        self.logger.info("Finished initializing class")
 
     def _setup(self):
         optimizer = optimizers.Adam()
@@ -87,12 +108,13 @@ class LDA2Vec(chainer.Chain):
         clip = chainer.optimizer.GradientClipping(self.grad_clip)
         optimizer.add_hook(clip)
         self._optimizer = optimizer
+        self.logger.info("Setup optimizer")
 
-    def _context(self, contexts):
+    def _context(self, components):
         """ For every context calculate and sum the embedding."""
         context = None
-        for component_name, context in zip(self.component_names, contexts):
-            e = self[component_name](context)
+        for component_name, component in zip(self.component_names, components):
+            e = self[component_name + "_mixture"](component)
             context = e if context is None else context + e
         return context
 
@@ -100,7 +122,8 @@ class LDA2Vec(chainer.Chain):
         """ Measure likelihood of seeing topic proportions"""
         loss = None
         for component in self.component_names:
-            dl = dirichlet_likelihood(self[component].weights)
+            name = component + "_mixture"
+            dl = dirichlet_likelihood(self[name].weights)
             loss = dl if loss is None else dl + loss
         return loss
 
@@ -108,7 +131,7 @@ class LDA2Vec(chainer.Chain):
         """ Given context, predict words."""
         total_loss = None
         for column in six.moves.range(self.n_sent_length):
-            target = Variable(self.xp.asarray(words[:, column]))
+            target = Variable(self._xp.asarray(words[:, column]))
             loss = self.loss_func(context, target)
             total_loss = loss if total_loss is None else total_loss + loss
         return total_loss
@@ -117,19 +140,31 @@ class LDA2Vec(chainer.Chain):
         """ Given context + every word, predict every other word"""
         raise NotImplemented
 
-    def _target(self, data_contexts, data_targets):
-        tk = self.target.keys()
-        args = (data_contexts, tk, data_targets)
+    def _target(self, data_components, data_targets):
         losses = None
-        for component, context, func, target in zip(*args):
-            l = func(context, target)
+        args = (data_components, data_targets, self.component_names)
+        for data_component, data_target, component in zip(*args):
+            # This function will input an ID and ouput
+            # (batchsize, n_hidden)
+            embedding = component[0]
+            # Transform (batchsize, n_hidden) -> (batchsize, n_dim)
+            # n_dim is 1 for RMSE, 1 for logistic outcomes, n for softmax
+            transform = component[1]
+            # loss_func gives likelihood of data_target given output
+            loss_func = component[2]
+            latent = embedding(data_component)
+            output = transform(latent)
+            l = loss_func(output, data_target)
             losses = l if losses is None else losses + l
+        if losses is None:
+            losses = 0.0
         return losses
 
     def _prune_rare(self, word_matrix):
         return word_matrix
 
-    def fit_partial(self, word_matrix, fraction, contexts=None, targets=None):
+    def fit_partial(self, word_matrix, fraction, components=None,
+                    targets=None):
         """ Train the latent document-to-topic weights, topic vectors,
         and word vectors on partial subset of the full data.
 
@@ -139,23 +174,34 @@ class LDA2Vec(chainer.Chain):
                 sentence, nth column is the nth word in that sentence.
             fraction (float): Fraction of all words this subset represents.
         """
-        if contexts is None:
-            contexts = []
+        word_matrix = word_matrix.astype('int32')
+        if self._initialized is False:
+            self.initialize()
+        if components is None:
+            components = []
         if targets is None:
             targets = []
-        msg = "Number of contexts not equal to initialized number of contexts"
-        assert len(contexts) == len(self.contexts), msg
+        msg = "Number of components not equal to initialized components"
+        assert len(components) == len(self.components), msg
         msg = "Number of targets not equal to initialized number of targets"
-        assert len(targets) == len(self.targets)
-        contexts = [Variable(c.astype('int32')) for c in contexts]
-        context = self._context(contexts)
-        word_matrix_pruned = self._prune_rare(word_matrix.astype('int32'))
-        prior_loss = self._priors(contexts)
-        words_loss = self._unigram(context, word_matrix_pruned)
-        trget_loss = self._target(contexts, targets)
-        total_loss = prior_loss * fraction + words_loss + trget_loss
+        vals = self.components.values()
+        assert len(targets) == sum([c[2] is not None for c in vals])
+        components = [Variable(self._xp.asarray(c.astype('int32')))
+                      for c in components]
+        context = self._context(components)
+        # word_matrix_pruned = self._prune_rare(word_matrix.astype('int32'))
+        prior_loss = self._priors(context)
+        words_loss = self._unigram(context, word_matrix)
+        trget_loss = self._target(components, targets)
+        # Loss is composed of loss from predicting the word given context,
+        # the target given the context, and the loss due to the prior
+        # on the mixture embedding
+        total_loss = words_loss + trget_loss + prior_loss * fraction
+        # Before calculating gradients, zero them or we will get NaN
         self.zerograds()
+        # Calculate back gradients
         total_loss.backward()
+        # Propogate gradients
         self._optimizer.update()
 
     def term_topics(self, component):
