@@ -25,11 +25,12 @@ def softmax(w):
     maxes = np.amax(w, axis=1)
     maxes = maxes.reshape(maxes.shape[0], 1)
     e = np.exp(w - maxes)
-    dist = e / np.sum(e, axis=1)
+    dist = e / np.sum(e, axis=1)[:, None]
     return dist
 
 
 def sample(values, probabilities, size):
+    assert np.allclose(np.sum(probabilities, axis=-1), 1.0)
     bins = np.add.accumulate(probabilities)
     return values[np.digitize(random_sample(size), bins)]
 
@@ -46,5 +47,5 @@ def fake_data(n_docs, n_words, n_hidden, n_sent_length):
     for doc_to_wrd in doc_to_wrds:
         words = sample(indices, doc_to_wrd, n_sent_length)
         sentences.append(words)
-    sentences = np.array(sentences).astype
-    return sentences
+    sentences = np.array(sentences)
+    return sentences.astype('int32')

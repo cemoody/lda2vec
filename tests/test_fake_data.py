@@ -5,14 +5,14 @@ import numpy as np
 def test_orthogonal_matrix():
     msg = "Orthogonal matrices have equal inverse and transpose"
     arr = fake_data.orthogonal_matrix([20, 20])
-    assert np.allclose(np.inv(arr), arr.T), msg
+    assert np.allclose(np.linalg.inv(arr), arr.T), msg
 
 
 def test_softmax():
-    arr = np.random.randn(100)
+    arr = np.random.randn(100, 15)
     probs = fake_data.softmax(arr)
     norms = np.sum(probs, axis=1)
-    assert np.allclose(norms, np.ones_like(probs))
+    assert np.allclose(norms, np.ones_like(norms))
 
 
 def test_sample():
