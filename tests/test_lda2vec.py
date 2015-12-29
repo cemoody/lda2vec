@@ -18,15 +18,17 @@ def generate(n_docs=300, n_words=10, n_sent_length=5, n_hidden=8):
 
 def test_compute_perplexity():
     model, words = generate()
+    n_topics = 2
     n_docs = words.shape[0]
     n_wrds = words.max() + 1
     n_obs = np.prod(words.shape)
     doc_ids = np.arange(n_docs)
+    model.add_component(n_docs, n_topics)
     log_perp = model.compute_log_perplexity(words, components=[doc_ids])
     log_prob = np.log(1.0 / n_wrds)
     theoretical = log_prob / n_obs
     msg = "Initial log perplexity is significantly different from uniform"
-    diff = np.abs(log_perp - theoretical) / theoretical
+    diff = np.abs(log_perp.data - theoretical) / theoretical
     assert diff < 1e-3, msg
 
 

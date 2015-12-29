@@ -4,6 +4,7 @@ import logging
 
 import chainer
 import chainer.links as L
+import chainer.functions as F
 from chainer import cuda
 from chainer import optimizers
 from chainer import Variable
@@ -60,6 +61,8 @@ class LDA2Vec(chainer.Chain):
             self._xp = np
             self.logger.info("Using NumPy on the CPU")
         self.loss_func = L.NegativeSampling(n_hidden, counts, n_samples)
+        data = np.random.randn(len(counts), n_hidden).astype('float32')
+        self.loss_func.W.data[:] = data[:]
         self.grad_clip = grad_clip
         self.components = {}
         self.component_names = []
@@ -194,13 +197,10 @@ class LDA2Vec(chainer.Chain):
                                                              components,
                                                              None)
         context = self._context(components)
-        sample_size = self.loss_func.sample_size
-        self.loss_func.sample_size = 0
-        log_prob = self._unigram(context, word_matrix)
-        self.loss_func.sample_size = sample_size
-        n_words = np.prod(word_matrix.data.shape)
-        log_perp = log_prob / n_words
-        return log_perp
+        n_words = np.prod(word_matrix.shape)
+        prob = F.softmax(F.matmul(context, F.transpose(self.loss_func.W)))
+        perp = prob / n_words
+        return F.log(F.sum(perp))
 
     def fit_partial(self, word_matrix, fraction, components=None,
                     targets=None):
