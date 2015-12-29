@@ -1,7 +1,5 @@
 import chainer.functions as F
-import chainer.links as L
 from chainer import Variable
-from chainer.cuda import get_array_module
 
 
 def dirichlet_likelihood(weights, alpha=None):
@@ -22,15 +20,15 @@ def dirichlet_likelihood(weights, alpha=None):
     Returns:
         ~chainer.Variable: Output loss variable.
     """
-    n_documents = weights.data.shape[0]
-    n_topics = weights.data.shape[1]
+    if type(weights) is Variable:
+        n_topics = weights.data.shape[1]
+    else:
+        n_topics = weights.W.data.shape[1]
     if alpha is None:
         alpha = 1.0 / n_topics
     if type(weights) is Variable:
         proportions = F.softmax(weights)
-    if type(weights) is L.EmbedID:
-        np = get_array_module()
-        all_docs = Variable(np.arange(n_documents, dtype='int32'))
-        proportions = F.softmax(weights(all_docs))
+    else:
+        proportions = F.softmax(weights.W)
     loss = (alpha - 1.0) * F.log(proportions + 1e-8)
     return -F.sum(loss)
