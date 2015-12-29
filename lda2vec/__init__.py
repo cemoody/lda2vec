@@ -1,7 +1,12 @@
 import dirichlet_likelihood
 import embed_mixture
 import lda2vec
+import tracking
+import preprocess
 
 dirichlet_likelihood = dirichlet_likelihood.dirichlet_likelihood
 EmbedMixture = embed_mixture.EmbedMixture
 LDA2Vec = lda2vec.LDA2Vec
+Tracking = tracking.Tracking
+tokenize = preprocess.tokenize
+nlp = preprocess.nlp
