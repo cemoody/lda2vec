@@ -3,7 +3,7 @@ import numpy as np
 
 
 class Corpus():
-    def __init__(self):
+    def __init__(self, out_of_vocabulary=-2):
         """ The corpus helps with tasks involving integer representations of
         words. This object is used to filter, subsample, and convert loose
         word indices to compact word indices.
@@ -33,6 +33,7 @@ class Corpus():
         """
         self.counts_loose = defaultdict(int)
         self._finalized = False
+        self.out_of_vocabulary = out_of_vocabulary
 
     def update_word_count(self, loose_array):
         """ Update the corpus word counts given a loose array of word indices.
@@ -101,6 +102,8 @@ class Corpus():
         self.loose_to_compact = loose_to_compact
         self.counts_compact = {loose_to_compact[l]: c for l, c in
                                zip(loose_keys, loose_cnts)}
+        self.keys_loose = keys
+        self.cnts_loose = cnts
         self._finalized = True
 
     def _check_finalized(self):
@@ -127,10 +130,40 @@ class Corpus():
         max_count : int
             Replace words occuring more frequently than this count. This
             defines the threshold for very frequent words
-        """
 
+        >>> corpus = Corpus()
+
+        Make 1000 word indices with index < 100 and update the word counts.
+        >>> word_indices = np.random.randint(100, size=1000)
+        >>> corpus.update_word_count(word_indices)
+        >>> corpus.finalize()  # any word indices above 99 will be filtered
+
+        Now create a new text, but with some indices above 100
+        >>> word_indices = np.random.randint(200, size=1000)
+        >>> word_indices.max() < 100
+        False
+
+        Remove words that have never appeared in the original corpus.
+        >>> filtered = corpus.filter_count(word_indices, min_count=1)
+        >>> filtered.max() < 100
+        True
+
+        We can also remove highly frequent words.
+        >>> filtered = corpus.filter_count(word_indices, max_count=2)
+        >>> len(np.unique(word_indices)) > len(np.unique(filtered))
+        True
+        """
         self._check_finalized()
-        raise NotImplemented
+        keys = self.keys_loose.copy()
+        reps = self.keys_loose.copy()
+        idx = np.ones_like(self.cnts_loose).astype('bool')
+        if min_count:
+            idx &= self.cnts_loose < min_count
+        if max_count:
+            idx &= self.cnts_loose > max_count
+        reps[idx] = self.out_of_vocabulary
+        ret = fast_replace(arr, keys, reps)
+        return ret
 
     def subsample_frequent(self, arr, pad=-1, threshold=1e-5):
         """ Subsample the most frequent words. This aggressively
@@ -168,6 +201,9 @@ def fast_replace(data, keys, values, skip_checks=False):
         Array of values that replace the `keys` array
     skip_checks : bool, default=False
         Optionally skip sanity checking the input.
+
+    >>> fast_replace(np.arange(5), np.arange(5), np.arange(5)[::-1])
+    array([4, 3, 2, 1, 0])
     """
     assert np.allclose(keys.shape, values.shape)
     if not skip_checks:
