@@ -4,7 +4,7 @@ import numpy as np
 
 class Corpus():
     def __init__(self, out_of_vocabulary=-2):
-        """ The corpus helps with tasks involving integer representations of
+        """ The Corpus helps with tasks involving integer representations of
         words. This object is used to filter, subsample, and convert loose
         word indices to compact word indices.
 
@@ -25,11 +25,11 @@ class Corpus():
         >>> words_raw = np.arange(25).reshape((5, 5))
         >>> corpus.update_word_count(words_raw)
         >>> corpus.finalize()
-        >>> # words_pruned = corpus.filter_count(words_raw, min_count=20)
-        >>> # words_sub = corpus.subsample_frequent(words_pruned, thresh=1e-5)
-        >>> # word_compact = corpus.convert_to_compact(words_sub)
-        >>> # word_loose = corpus.covnert_to_loose(word_compact)
-        >>> # np.all(word_loose == words_sub)
+        >>> word_compact = corpus.to_compact(words_raw)
+        >>> words_pruned = corpus.filter_count(words_compact, min_count=20)
+        >>> words_sub = corpus.subsample_frequent(words_pruned, thresh=1e-5)
+        >>> word_loose = corpus.covnert_to_loose(word_sub)
+        >>> np.all(word_loose == words_raw)
         """
         self.counts_loose = defaultdict(int)
         self._finalized = False
@@ -77,7 +77,6 @@ class Corpus():
 
         The corpus has not been finalized yet, and so the compact mapping
         has not yet been computed.
-
         >>> corpus.counts_compact[0]
         Traceback (most recent call last):
             ...
@@ -102,8 +101,7 @@ class Corpus():
         self.loose_to_compact = loose_to_compact
         self.counts_compact = {loose_to_compact[l]: c for l, c in
                                zip(loose_keys, loose_cnts)}
-        self.keys_loose = keys
-        self.cnts_loose = cnts
+        self._counts_loose_arrs = dict(keys=loose_keys, counts=loose_cnts)
         self._finalized = True
 
     def _check_finalized(self):
@@ -154,8 +152,8 @@ class Corpus():
         True
         """
         self._check_finalized()
-        keys = self.keys_loose.copy()
-        reps = self.keys_loose.copy()
+        keys = self.loose_counts['keys'].copy()
+        reps = self.loose_counts['keys'].copy()
         idx = np.ones_like(self.cnts_loose).astype('bool')
         if min_count:
             idx &= self.cnts_loose < min_count
@@ -179,9 +177,39 @@ class Corpus():
         self._check_finalized()
         raise NotImplemented
 
-    def convert_to_compact(self, arr):
+    def to_compact(self, word_loose):
+        """ Convert a loose word index matrix to a compact array using
+        a fixed loose to dense mapping. Out of vocabulary word indices
+        will be replaced by the out of vocabulary index. The most common
+        index will be mapped to 0, the next most common to 1, and so on.
+
+        >>> corpus = Corpus()
+        >>> word_indices = np.random.randint(100, size=1000)
+        >>> corpus.update_word_count(word_indices)
+        >>> corpus.finalize()  # any word indices above 99 will be filtered
+        >>> word_compact = corpus.to_compact(word_indices)
+
+        The most common word in the training set will be mapped to zero.
+        >>> most_common = np.argmax(np.bincount(word_indices))
+        >>> corpus.loose_to_compact[most_common] == 0
+        True
+
+        Out of vocabulary indices will be mapped to -1.
+        >>> word_indices = np.random.randint(150, size=1000)
+        >>> word_compact = corpus.to_compact(word_indices)
+        >>> -1 in word_compact
+        True
+        """
         self._check_finalized()
-        raise NotImplemented
+        keys = self._counts_loose_arrs['keys'].copy()
+        reps = self._counts_loose_arrs['keys'].copy()
+        uniques = np.unique(word_loose)
+        # Find the out of vocab indices
+        oov = np.setdiff1d(uniques, keys, assume_unique=True)
+        reps = np.concatenate((keys, np.zeros_like(oov) - 1))
+        keys = np.concatenate((keys, oov))
+        compact = fast_replace(word_loose, keys, reps)
+        return compact
 
     def convert_to_loose(self, arr):
         self._check_finalized()
@@ -208,6 +236,8 @@ def fast_replace(data, keys, values, skip_checks=False):
     assert np.allclose(keys.shape, values.shape)
     if not skip_checks:
         assert data.max() <= keys.max()
+    sdx = np.argsort(keys)
+    keys, values = keys[sdx], values[sdx]
     idx = np.digitize(data, keys, right=True)
     new_data = values[idx]
     return new_data

@@ -9,7 +9,7 @@ from sklearn.datasets import fetch_20newsgroups
 
 # Fetch data
 texts = fetch_20newsgroups(subset='train').data
-# Convert to unicode (spaCy does not work with normal strings)
+# Convert to unicode (spaCy only works with unicode)
 texts = [unicode(d) for d in texts]
 
 max_length = max(len(doc) for doc in texts)
