@@ -198,6 +198,11 @@ class Corpus():
         will be replaced by the out of vocabulary index. The most common
         index will be mapped to 0, the next most common to 1, and so on.
 
+        Arguments
+        ---------
+        word_loose : int array
+            Input loose word array to be converted into a compact array.
+
         >>> corpus = Corpus()
         >>> word_indices = np.random.randint(100, size=1000)
         >>> n_words = len(np.unique(word_indices))
@@ -234,6 +239,11 @@ class Corpus():
 
     def to_loose(self, word_compact):
         """ Convert a compacted array back into a loose array.
+
+        Arguments
+        ---------
+        word_compact : int array
+            Input compacted word array to be converted into a loose array.
 
         >>> corpus = Corpus()
         >>> word_indices = np.random.randint(100, size=1000)
