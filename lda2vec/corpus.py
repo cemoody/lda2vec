@@ -3,7 +3,7 @@ import numpy as np
 
 
 class Corpus():
-    def __init__(self, counts=None):
+    def __init__(self):
         """ The corpus helps with tasks involving integer representations of
         words. This object is used to filter, subsample, and convert loose
         word indices to compact word indices.
@@ -30,7 +30,7 @@ class Corpus():
         >>> word_loose = corpus.covnert_to_loose(word_compact)
         >>> np.all(word_loose == words_sub)
         """
-        self.counts = defaultdict(int)
+        self.counts_loose = defaultdict(int)
         self._finalized = False
 
     def update_word_count(self, loose_array):
@@ -46,27 +46,58 @@ class Corpus():
         >>> corpus = Corpus()
         >>> corpus.update_word_count(np.arange(10))
         >>> corpus.update_word_count(np.arange(8))
-        >>> corpus.counts[0]
+        >>> corpus.counts_loose[0]
         2
-        >>> corpus.counts[9]
+        >>> corpus.counts_loose[9]
         1
         """
         self._check_unfinalized()
         uniques, counts = np.unique(np.ravel(loose_array), return_counts=True)
         for k, v in zip(uniques, counts):
-            self.counts[k] += v
+            self.counts_loose[k] += v
 
     def finalize(self):
         """ Call `finalize` once done updating word counts. This means the
-        object will no longer accept new word count data, but is free to
+        object will no longer accept new word count data, but the loose
+        to compact index mapping can be computed. This frees the object to
         filter, subsample, and compactify incoming word arrays.
 
         >>> corpus = Corpus()
-        >>> corpus.update_word_count(np.arange(10))
-        >>> corpus.update_word_count(np.arange(8))
+
+        We'll update the word counts, making sure that word index 2
+        is the most common word index.
+        >>> corpus.update_word_count(np.arange(1) + 2)
+        >>> corpus.update_word_count(np.arange(3) + 2)
+        >>> corpus.update_word_count(np.arange(10) + 2)
+        >>> corpus.update_word_count(np.arange(8) + 2)
+        >>> corpus.counts_loose[2]
+        4
+
+        The corpus has not been finalized yet, and so the compact mapping
+        has not yet been computed.
+
+        >>> corpus.counts_compact[0]
+        AttributeError
         >>> corpus.finalize()
-        >>> corpus._check_finalized()
+        >>> corpus.counts_compact[0]
+        4
+        >>> corpus.loose_to_compact[2]
+        0
+        >>> corpus.loose_to_compact[3]
+        1
         """
+        carr = sorted(self.counts_loose.items(), key=lambda x: x[1],
+                      reverse=True)
+        keys = np.array(carr)[:, 0]
+        cnts = np.array(carr)[:, 1]
+        order = np.argsort(cnts)[::-1].astype('int32')
+        loose_cnts = cnts[order]
+        loose_keys = keys[order]
+        compact_keys = np.arange(keys.shape[0]).astype('int32')
+        loose_to_compact = {l: c for l, c in zip(loose_keys, compact_keys)}
+        self.loose_to_compact = loose_to_compact
+        self.counts_compact = {loose_to_compact[l]: c for l, c in
+                               zip(loose_keys, loose_cnts)}
         self._finalized = True
 
     def _check_finalized(self):
@@ -94,6 +125,7 @@ class Corpus():
             Replace words occuring more frequently than this count. This
             defines the threshold for very frequent words
         """
+
         self._check_finalized()
         raise NotImplemented
 
@@ -113,14 +145,31 @@ class Corpus():
 
     def convert_to_compact(self, arr):
         self._check_finalized()
+        fast_replace(arr, keys, values)
         raise NotImplemented
 
     def convert_to_loose(self, arr):
         self._check_finalized()
-        rep_keys = np.arange(len(counts)).astype('int32')
-        rep_vals = np.argsort(counts)[::-1].astype('int32')
-        idx = np.digitize(data, rep_keys, right=True)
-        new_data = rep_vals[idx]
-        old2new = {k: v for (k, v) in zip(rep_keys, rep_vals)}
-        new_counts = {old2new[k]: v for k, v in counts.iteritems()}
-        return new_data, new_counts, vocab, old2new
+        raise NotImplemented
+
+
+def fast_replace(data, keys, values, skip_checks=False):
+    """ Do a search-and-replace in array `data`.
+
+    Arguments
+    ---------
+    data : int array
+        Array of integers
+    keys : int array
+        Array of keys inside of `data` to be replaced
+    values : int array
+        Array of values that replace the `keys` array
+    skip_checks : bool, default=False
+        Optionally skip sanity checking the input.
+    """
+    assert np.allclose(keys.shape, values.shape)
+    if not skip_checks:
+        assert data.max() <= keys.max()
+    idx = np.digitize(data, keys, right=True)
+    new_data = values[idx]
+    return new_data
