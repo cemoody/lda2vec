@@ -13,8 +13,8 @@ texts = fetch_20newsgroups(subset='train').data
 texts = [unicode(d) for d in texts]
 
 max_length = max(len(doc) for doc in texts)
-tokens, counts, vocab = preprocess.tokenize(texts, max_length, tag=False,
-                                            parse=False, entity=False)
+tokens, vocab = preprocess.tokenize(texts, max_length, tag=False,
+                                    parse=False, entity=False)
 
 corpus = Corpus()
 # Make a ranked list of rare vs frequent words
@@ -29,6 +29,8 @@ pruned = corpus.filter_count(compact, max_count=1, min_count=5)
 # Words tend to have power law frequency, so selectively
 # downsample the most prevalent words
 clean = corpus.subsample_frequent(pruned)
+# Get the count for each key
+counts = corpus.keys_counts
 
 
 # Number of documents

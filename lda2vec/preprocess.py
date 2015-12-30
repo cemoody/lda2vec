@@ -7,7 +7,7 @@ import numpy as np
 nlp = None
 
 
-def tokenize(texts, max_length, pad=-1, **kwargs):
+def tokenize(texts, max_length, skip=-2, **kwargs):
     """ Uses spaCy to quickly tokenize text and return an array
     of indices.
 
@@ -23,7 +23,7 @@ def tokenize(texts, max_length, pad=-1, **kwargs):
     max_length : int
         This is the maximum number of words per document. If the document is
         shorter then this number it will be padded to this length.
-    pad : int, optional
+    skip : int, optional
         Short documents will be padded with this variable up until max_length.
     kwargs : dict, optional
         Any further argument will be sent to the spaCy tokenizer. For extra
@@ -34,37 +34,34 @@ def tokenize(texts, max_length, pad=-1, **kwargs):
     arr : 2D array of ints
         Has shape (len(texts), max_length). Each value represents
         the word index.
-    counts : 1D array of ints
-        The number of times each of the unique values comes up in the original
-        array.
     vocab : dict
         Keys are the word index, and values are the string. The pad index gets
         mapped to None
 
-    >>> arr, counts, vocab = tokenize([u"Do you recall", u"not long ago"], 5)
+    >>> arr, vocab = tokenize([u"Do you recall", u"not long ago"], 5)
     >>> w2i = {w: i for i, w in vocab.iteritems()}
     >>> arr[0, 0] == w2i[u'Do']  # First word and its index should match
     True
     >>> arr[0, -1]  # last word in 0th document is a pad word
-    -1
+    -2
     """
     global nlp
     if nlp is None:
         data_dir = os.environ.get('SPACY_DATA', LOCAL_DATA_DIR)
         nlp = English(data_dir=data_dir)
     data = np.zeros((len(texts), max_length), dtype='int32')
-    data[:] = pad
+    data[:] = skip
     for row, text in enumerate(texts):
         doc = nlp(text, **kwargs)
         dat = doc.to_array([LOWER]).astype('int32')
         length = min(len(dat), max_length)
         data[row, :length] = dat[:length, :].ravel()
-    uniques, counts = np.unique(data, return_counts=True)
-    vocab = {v: nlp.vocab[v].orth_ for v in uniques if v != -1}
-    msg = "Cannot pick a pad integer that is legal spaCy word index"
-    assert pad not in vocab, msg
-    vocab[pad] = None
-    return data, counts, vocab
+    uniques = np.unique(data)
+    msg = "Negative indices reserved for special tokens"
+    assert uniques.min() >= 0, msg
+    vocab = {v: nlp.vocab[v].lower_ for v in uniques if v != skip}
+    vocab[skip] = '<SKIP>'
+    return data, vocab
 
 
 if __name__ == "__main__":
