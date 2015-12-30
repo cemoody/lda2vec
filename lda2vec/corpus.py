@@ -25,11 +25,13 @@ class Corpus():
         >>> words_raw = np.arange(25).reshape((5, 5))
         >>> corpus.update_word_count(words_raw)
         >>> corpus.finalize()
-        >>> word_compact = corpus.to_compact(words_raw)
+        >>> words_compact = corpus.to_compact(words_raw)
         >>> words_pruned = corpus.filter_count(words_compact, min_count=20)
-        >>> words_sub = corpus.subsample_frequent(words_pruned, thresh=1e-5)
-        >>> word_loose = corpus.covnert_to_loose(word_sub)
-        >>> np.all(word_loose == words_raw)
+        >>> # words_sub = corpus.subsample_frequent(words_pruned, thresh=1e-5)
+        >>> words_loose = corpus.to_loose(words_pruned)
+        >>> not_oov = words_loose > -1
+        >>> print(words_loose[not_oov], words_raw[not_oov])
+        >>> np.all(words_loose[not_oov] == words_raw[not_oov])
         """
         self.counts_loose = defaultdict(int)
         self._finalized = False
@@ -248,7 +250,7 @@ class Corpus():
         oov = np.setdiff1d(uniques, self.keys_compact, assume_unique=True)
         msg = "Found keys in `word_compact` not present in the corpus. "
         msg += " Is this actually a compacted array?"
-        assert len(oov) == 0, msg
+        assert np.all(oov < 0), msg
         loose = fast_replace(word_compact, self.keys_compact, self.keys_loose)
         return loose
 
