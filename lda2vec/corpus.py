@@ -88,12 +88,12 @@ class Corpus():
 
         The corpus has not been finalized yet, and so the compact mapping
         has not yet been computed.
-        >>> corpus.counts_compact[0]
+        >>> corpus.keys_counts[0]
         Traceback (most recent call last):
             ...
-        AttributeError: Corpus instance has no attribute 'counts_compact'
+        AttributeError: Corpus instance has no attribute 'keys_counts'
         >>> corpus.finalize()
-        >>> corpus.counts_compact[0]
+        >>> corpus.keys_counts[0]
         4
         >>> corpus.loose_to_compact[2]
         0
@@ -102,14 +102,13 @@ class Corpus():
         """
         # Return the loose keys and counts in descending count order
         # so that the counts arrays is already in compact order
-        loose_keys, counts, n_keys = self._get_loose_keys_ordered()
-        compact_keys = np.arange(n_keys).astype('int32')
+        self.keys_loose, counts, n_keys = self._get_loose_keys_ordered()
+        self.keys_compact = np.arange(n_keys).astype('int32')
+        self.keys_counts = counts
         self.loose_to_compact = {l: c for l, c in
-                                 zip(loose_keys, compact_keys)}
+                                 zip(self.keys_loose, self.keys_compact)}
         self.compact_to_loose = {c: l for l, c in
                                  self.loose_to_compact.items()}
-        self.counts_compact = counts
-        self._counts_loose_arrs = dict(keys=loose_keys, counts=counts)
         self._finalized = True
 
     def _check_finalized(self):
@@ -167,12 +166,12 @@ class Corpus():
         ret = words_compact.copy()
         if min_count:
             # Find first index with count less than min_count
-            min_idx = np.argmax(self.counts_compact < min_count)
+            min_idx = np.argmax(self.keys_counts < min_count)
             # Replace all indices greater than min_idx
             ret[ret > min_idx] = min_replacement
         if max_count:
             # Find first index with count less than max_count
-            max_idx = np.argmax(self.counts_compact < max_count)
+            max_idx = np.argmax(self.keys_counts < max_count)
             # Replace all indices less than max_idx
             ret[ret < max_idx] = max_replacement
         return ret
@@ -199,13 +198,19 @@ class Corpus():
 
         >>> corpus = Corpus()
         >>> word_indices = np.random.randint(100, size=1000)
+        >>> n_words = len(np.unique(word_indices))
         >>> corpus.update_word_count(word_indices)
         >>> corpus.finalize()  # any word indices above 99 will be filtered
         >>> word_compact = corpus.to_compact(word_indices)
+        >>> np.argmax(np.bincount(word_compact)) == 0
+        True
 
         The most common word in the training set will be mapped to zero.
         >>> most_common = np.argmax(np.bincount(word_indices))
+        >>> least_common = np.argmin(np.bincount(word_indices))
         >>> corpus.loose_to_compact[most_common] == 0
+        True
+        >>> corpus.loose_to_compact[least_common] == n_words - 1
         True
 
         Out of vocabulary indices will be mapped to -1.
@@ -215,19 +220,37 @@ class Corpus():
         True
         """
         self._check_finalized()
-        keys = self._counts_loose_arrs['keys'].copy()
-        reps = self._counts_loose_arrs['keys'].copy()
+        keys = self.keys_loose.copy()
+        reps = self.keys_compact.copy()
         uniques = np.unique(word_loose)
         # Find the out of vocab indices
         oov = np.setdiff1d(uniques, keys, assume_unique=True)
-        reps = np.concatenate((keys, np.zeros_like(oov) - 1))
         keys = np.concatenate((keys, oov))
+        reps = np.concatenate((reps, np.zeros_like(oov) - 1))
         compact = fast_replace(word_loose, keys, reps)
         return compact
 
-    def to_loose(self, arr):
+    def to_loose(self, word_compact):
+        """ Convert a compacted array back into a loose array.
+
+        >>> corpus = Corpus()
+        >>> word_indices = np.random.randint(100, size=1000)
+        >>> corpus.update_word_count(word_indices)
+        >>> corpus.finalize()
+        >>> word_compact = corpus.to_compact(word_indices)
+        >>> word_loose = corpus.to_loose(word_compact)
+        >>> np.all(word_loose == word_indices)
+        True
+        """
         self._check_finalized()
-        raise NotImplemented
+        uniques = np.unique(word_compact)
+        # Find the out of vocab indices
+        oov = np.setdiff1d(uniques, self.keys_compact, assume_unique=True)
+        msg = "Found keys in `word_compact` not present in the corpus. "
+        msg += " Is this actually a compacted array?"
+        assert len(oov) == 0, msg
+        loose = fast_replace(word_compact, self.keys_compact, self.keys_loose)
+        return loose
 
 
 def fast_replace(data, keys, values, skip_checks=False):
