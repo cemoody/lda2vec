@@ -58,6 +58,17 @@ class Corpus():
         for k, v in zip(uniques, counts):
             self.counts_loose[k] += v
 
+    def _get_loose_keys_ordered(self):
+        """ Get the loose keys in order of decreasing frequency"""
+        loose_counts = sorted(self.counts_loose.items(), key=lambda x: x[1],
+                              reverse=True)
+        keys = np.array(loose_counts)[:, 0]
+        counts = np.array(loose_counts)[:, 1]
+        order = np.argsort(counts)[::-1].astype('int32')
+        keys, counts = keys[order], counts[order]
+        n_keys = keys.shape[0]
+        return keys, counts, n_keys
+
     def finalize(self):
         """ Call `finalize` once done updating word counts. This means the
         object will no longer accept new word count data, but the loose
@@ -89,19 +100,16 @@ class Corpus():
         >>> corpus.loose_to_compact[3]
         2
         """
-        carr = sorted(self.counts_loose.items(), key=lambda x: x[1],
-                      reverse=True)
-        keys = np.array(carr)[:, 0]
-        cnts = np.array(carr)[:, 1]
-        order = np.argsort(cnts)[::-1].astype('int32')
-        loose_cnts = cnts[order]
-        loose_keys = keys[order]
-        compact_keys = np.arange(keys.shape[0]).astype('int32')
-        loose_to_compact = {l: c for l, c in zip(loose_keys, compact_keys)}
-        self.loose_to_compact = loose_to_compact
-        self.counts_compact = {loose_to_compact[l]: c for l, c in
-                               zip(loose_keys, loose_cnts)}
-        self._counts_loose_arrs = dict(keys=loose_keys, counts=loose_cnts)
+        # Return the loose keys and counts in descending count order
+        # so that the counts arrays is already in compact order
+        loose_keys, counts, n_keys = self._get_loose_keys_ordered()
+        compact_keys = np.arange(n_keys).astype('int32')
+        self.loose_to_compact = {l: c for l, c in
+                                 zip(loose_keys, compact_keys)}
+        self.compact_to_loose = {c: l for l, c in
+                                 self.loose_to_compact.items()}
+        self.counts_compact = counts
+        self._counts_loose_arrs = dict(keys=loose_keys, counts=counts)
         self._finalized = True
 
     def _check_finalized(self):
@@ -113,21 +121,25 @@ class Corpus():
         msg += "has been called"
         assert not self._finalized, msg
 
-    def filter_count(self, arr, max_count=0, min_count=20000, pad=-1):
+    def filter_count(self, words_compact, min_count=20000, max_count=0,
+                     max_replacement=-1, min_replacement=-1):
         """ Replace word indices below min_count with the pad index.
 
         Arguments
         ---------
-        arr : int array
-            Source array whose values will be replaced
-        pad : int
-            Rare word indices will be replaced with this index
+        words_compact: int array
+            Source array whose values will be replaced. This is assumed to
+            already be converted into a compact array with `to_compact`.
         min_count : int
             Replace words less frequently occuring than this count. This
             defines the threshold for what words are very rare
         max_count : int
             Replace words occuring more frequently than this count. This
             defines the threshold for very frequent words
+        min_replacement : int
+            Replace words less than min_count with this.
+        max_replacement : int
+            Replace words greater than max_count with this.
 
         >>> corpus = Corpus()
 
@@ -152,15 +164,17 @@ class Corpus():
         True
         """
         self._check_finalized()
-        keys = self.loose_counts['keys'].copy()
-        reps = self.loose_counts['keys'].copy()
-        idx = np.ones_like(self.cnts_loose).astype('bool')
+        ret = words_compact.copy()
         if min_count:
-            idx &= self.cnts_loose < min_count
+            # Find first index with count less than min_count
+            min_idx = np.argmax(self.counts_compact < min_count)
+            # Replace all indices greater than min_idx
+            ret[ret > min_idx] = min_replacement
         if max_count:
-            idx &= self.cnts_loose > max_count
-        reps[idx] = self.out_of_vocabulary
-        ret = fast_replace(arr, keys, reps)
+            # Find first index with count less than max_count
+            max_idx = np.argmax(self.counts_compact < max_count)
+            # Replace all indices less than max_idx
+            ret[ret < max_idx] = max_replacement
         return ret
 
     def subsample_frequent(self, arr, pad=-1, threshold=1e-5):
@@ -211,7 +225,7 @@ class Corpus():
         compact = fast_replace(word_loose, keys, reps)
         return compact
 
-    def convert_to_loose(self, arr):
+    def to_loose(self, arr):
         self._check_finalized()
         raise NotImplemented
 
