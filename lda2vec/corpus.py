@@ -22,13 +22,14 @@ class Corpus():
         before any filtering and subsampling operations can happen.
 
         >>> corpus = Corpus()
+        >>> words_raw = np.arange(25).reshape((5, 5))
         >>> corpus.update_word_count(words_raw)
         >>> corpus.finalize()
-        >>> words_pruned = corpus.filter_count(words_raw, min_count=20)
-        >>> words_sub = corpus.subsample_frequent(words_pruned, thresh=1e-5)
-        >>> word_compact = corpus.convert_to_compact(words_sub)
-        >>> word_loose = corpus.covnert_to_loose(word_compact)
-        >>> np.all(word_loose == words_sub)
+        >>> # words_pruned = corpus.filter_count(words_raw, min_count=20)
+        >>> # words_sub = corpus.subsample_frequent(words_pruned, thresh=1e-5)
+        >>> # word_compact = corpus.convert_to_compact(words_sub)
+        >>> # word_loose = corpus.covnert_to_loose(word_compact)
+        >>> # np.all(word_loose == words_sub)
         """
         self.counts_loose = defaultdict(int)
         self._finalized = False
@@ -77,14 +78,16 @@ class Corpus():
         has not yet been computed.
 
         >>> corpus.counts_compact[0]
-        AttributeError
+        Traceback (most recent call last):
+            ...
+        AttributeError: Corpus instance has no attribute 'counts_compact'
         >>> corpus.finalize()
         >>> corpus.counts_compact[0]
         4
         >>> corpus.loose_to_compact[2]
         0
         >>> corpus.loose_to_compact[3]
-        1
+        2
         """
         carr = sorted(self.counts_loose.items(), key=lambda x: x[1],
                       reverse=True)
@@ -107,7 +110,7 @@ class Corpus():
     def _check_unfinalized(self):
         msg = "Cannot update word counts after self.finalized()"
         msg += "has been called"
-        assert self._finalized, msg
+        assert not self._finalized, msg
 
     def filter_count(self, arr, max_count=0, min_count=20000, pad=-1):
         """ Replace word indices below min_count with the pad index.
@@ -145,7 +148,6 @@ class Corpus():
 
     def convert_to_compact(self, arr):
         self._check_finalized()
-        fast_replace(arr, keys, values)
         raise NotImplemented
 
     def convert_to_loose(self, arr):
