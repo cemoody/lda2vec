@@ -40,7 +40,7 @@ def tokenize(texts, max_length, skip=-2, **kwargs):
 
     >>> arr, vocab = tokenize([u"Do you recall", u"not long ago"], 5)
     >>> w2i = {w: i for i, w in vocab.iteritems()}
-    >>> arr[0, 0] == w2i[u'Do']  # First word and its index should match
+    >>> arr[0, 0] == w2i[u'do']  # First word and its index should match
     True
     >>> arr[0, -1]  # last word in 0th document is a pad word
     -2
@@ -56,9 +56,9 @@ def tokenize(texts, max_length, skip=-2, **kwargs):
         dat = doc.to_array([LOWER]).astype('int32')
         length = min(len(dat), max_length)
         data[row, :length] = dat[:length, :].ravel()
+        msg = "Negative indices reserved for special tokens"
+        assert dat.min() >= 0, msg
     uniques = np.unique(data)
-    msg = "Negative indices reserved for special tokens"
-    assert uniques.min() >= 0, msg
     vocab = {v: nlp.vocab[v].lower_ for v in uniques if v != skip}
     vocab[skip] = '<SKIP>'
     return data, vocab
