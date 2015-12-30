@@ -3,7 +3,9 @@ import numpy as np
 
 
 class Corpus():
-    def __init__(self, out_of_vocabulary=-2):
+    _keys_frequency = None
+
+    def __init__(self, skip=-1, out_of_vocabulary=-2):
         """ The Corpus helps with tasks involving integer representations of
         words. This object is used to filter, subsample, and convert loose
         word indices to compact word indices.
@@ -21,6 +23,17 @@ class Corpus():
         index count must be updated fully and `self.finalize()` must be called
         before any filtering and subsampling operations can happen.
 
+        Arguments
+        ---------
+        skip : int, default=-1
+            Token index to replace whenever we want to skip the current frame.
+            Particularly useful when subsampling words or when padding a
+            sentence.
+        out_of_vocabulary : int, default=-2
+            Token index to replace whenever we encounter a rare or unseen word.
+            Instead of skipping the token, we mark as an out of vocabulary
+            word.
+
         >>> corpus = Corpus()
         >>> words_raw = np.random.randint(100, size=25)
         >>> corpus.update_word_count(words_raw)
@@ -35,7 +48,8 @@ class Corpus():
         """
         self.counts_loose = defaultdict(int)
         self._finalized = False
-        self.out_of_vocabulary = out_of_vocabulary
+        self.special = dict(out_of_vocabulary=out_of_vocabulary,
+                            skip=skip)
 
     def update_word_count(self, loose_array):
         """ Update the corpus word counts given a loose array of word indices.
@@ -113,6 +127,13 @@ class Corpus():
                                  self.loose_to_compact.items()}
         self._finalized = True
 
+    @property
+    def keys_frequency(self):
+        if self._keys_frequency is None:
+            f = self.keys_counts * 1.0 / np.sum(self.keys_counts)
+            self._keys_frequency = f
+        return self._keys_frequency
+
     def _check_finalized(self):
         msg = "self.finalized() must be called before any other array ops"
         assert self._finalized, msg
@@ -123,7 +144,7 @@ class Corpus():
         assert not self._finalized, msg
 
     def filter_count(self, words_compact, min_count=20000, max_count=0,
-                     max_replacement=-1, min_replacement=-1):
+                     max_replacement=None, min_replacement=None):
         """ Replace word indices below min_count with the pad index.
 
         Arguments
@@ -137,9 +158,9 @@ class Corpus():
         max_count : int
             Replace words occuring more frequently than this count. This
             defines the threshold for very frequent words
-        min_replacement : int
+        min_replacement : int, default is out_of_vocabulary
             Replace words less than min_count with this.
-        max_replacement : int
+        max_replacement : int, default is out_of_vocabulary
             Replace words greater than max_count with this.
 
         >>> corpus = Corpus()
@@ -166,6 +187,10 @@ class Corpus():
         """
         self._check_finalized()
         ret = words_compact.copy()
+        if min_replacement is None:
+            min_replacement = self.special['out_of_vocabulary']
+        if max_replacement is None:
+            max_replacement = self.special['out_of_vocabulary']
         if min_count:
             # Find first index with count less than min_count
             min_idx = np.argmax(self.keys_counts < min_count)
@@ -178,11 +203,31 @@ class Corpus():
             ret[ret < max_idx] = max_replacement
         return ret
 
-    def subsample_frequent(self, arr, pad=-1, threshold=1e-5):
+    def subsample_frequent(self, words_compact, threshold=1e-5):
         """ Subsample the most frequent words. This aggressively
-        drops word with frequencies higher than `threshold`.
+        replaces words with frequencies higher than `threshold`. Words
+        are replaced with the out_of_vocabulary token.
 
+        Words will be replaced with probability as a function of their
+        ferquency in the training corpus:
         .. math :: p(w) = 1.0 - \sqrt{\frac{threshold}{f(w)}}
+
+        Arguments
+        ---------
+        words_compact: int array
+            The input array to subsample.
+        threshold: float in [0, 1]
+            Words with frequencies higher than this will be increasingly
+            subsampled.
+
+        >>> corpus = Corpus()
+        >>> word_indices = (np.random.power(5.0, size=1000) * 100).astype('i')
+        >>> corpus.update_word_count(word_indices)
+        >>> corpus.finalize()
+        >>> compact = corpus.to_compact(word_indices)
+        >>> sampled = corpus.subsample_frequent(compact, threshold=1e-2)
+        >>> np.sum(sampled == 0) < np.sum(compact == 0)
+        True
 
         .. [1] Distributed Representations of Words and Phrases and
                their Compositionality. Mikolov, Tomas and Sutskever, Ilya
@@ -190,7 +235,13 @@ class Corpus():
                Advances in Neural Information Processing Systems 26
         """
         self._check_finalized()
-        raise NotImplemented
+        prob = 1.0 - np.sqrt(threshold / self.keys_frequency)
+        prob = np.clip(prob, 0, 1)
+        prob = fast_replace(words_compact, self.keys_compact, prob)
+        draw = np.random.uniform(size=prob.shape)
+        ret = words_compact.copy()
+        ret[prob > draw] = self.special['skip']
+        return ret
 
     def to_compact(self, word_loose):
         """ Convert a loose word index matrix to a compact array using
@@ -216,8 +267,6 @@ class Corpus():
         >>> most_common = np.argmax(np.bincount(word_indices))
         >>> least_common = np.argmin(np.bincount(word_indices))
         >>> corpus.loose_to_compact[most_common] == 0
-        True
-        >>> corpus.loose_to_compact[least_common] == n_words - 1
         True
 
         Out of vocabulary indices will be mapped to -1.
@@ -286,7 +335,8 @@ def fast_replace(data, keys, values, skip_checks=False):
     """
     assert np.allclose(keys.shape, values.shape)
     if not skip_checks:
-        assert data.max() <= keys.max()
+        msg = "data has elements not in keys"
+        assert data.max() <= keys.max(), msg
     sdx = np.argsort(keys)
     keys, values = keys[sdx], values[sdx]
     idx = np.digitize(data, keys, right=True)
