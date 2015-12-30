@@ -5,7 +5,7 @@ import numpy as np
 class Corpus():
     _keys_frequency = None
 
-    def __init__(self, skip=-1, out_of_vocabulary=-2):
+    def __init__(self, out_of_vocabulary=-1, skip=-2):
         """ The Corpus helps with tasks involving integer representations of
         words. This object is used to filter, subsample, and convert loose
         word indices to compact word indices.
@@ -25,14 +25,14 @@ class Corpus():
 
         Arguments
         ---------
-        skip : int, default=-1
-            Token index to replace whenever we want to skip the current frame.
-            Particularly useful when subsampling words or when padding a
-            sentence.
-        out_of_vocabulary : int, default=-2
+        out_of_vocabulary : int, default=-1
             Token index to replace whenever we encounter a rare or unseen word.
             Instead of skipping the token, we mark as an out of vocabulary
             word.
+        skip : int, default=-2
+            Token index to replace whenever we want to skip the current frame.
+            Particularly useful when subsampling words or when padding a
+            sentence.
 
         >>> corpus = Corpus()
         >>> words_raw = np.random.randint(100, size=25)
@@ -48,8 +48,12 @@ class Corpus():
         """
         self.counts_loose = defaultdict(int)
         self._finalized = False
-        self.special = dict(out_of_vocabulary=out_of_vocabulary,
-                            skip=skip)
+        self.specials = dict(out_of_vocabulary=out_of_vocabulary,
+                             skip=skip)
+
+    @property
+    def n_specials(self):
+        return len(self.specials)
 
     def update_word_count(self, loose_array):
         """ Update the corpus word counts given a loose array of word indices.
@@ -71,10 +75,13 @@ class Corpus():
         """
         self._check_unfinalized()
         uniques, counts = np.unique(np.ravel(loose_array), return_counts=True)
+        msg = "Loose arrays cannot have elements below zero "
+        msg += "as these indices are reserved"
+        assert uniques.min() >= 0, msg
         for k, v in zip(uniques, counts):
             self.counts_loose[k] += v
 
-    def _get_loose_keys_ordered(self):
+    def _loose_keys_ordered(self):
         """ Get the loose keys in order of decreasing frequency"""
         loose_counts = sorted(self.counts_loose.items(), key=lambda x: x[1],
                               reverse=True)
@@ -82,7 +89,13 @@ class Corpus():
         counts = np.array(loose_counts)[:, 1]
         order = np.argsort(counts)[::-1].astype('int32')
         keys, counts = keys[order], counts[order]
+        # Add in the specials as a prefix to the other keys
+        specials = np.sort(self.specials.values())
+        keys = np.concatenate((specials, keys))
+        empty = np.zeros(len(specials), dtype='int32')
+        counts = np.concatenate((empty, counts))
         n_keys = keys.shape[0]
+        assert counts.min() >= 0
         return keys, counts, n_keys
 
     def finalize(self):
@@ -109,22 +122,36 @@ class Corpus():
             ...
         AttributeError: Corpus instance has no attribute 'keys_counts'
         >>> corpus.finalize()
-        >>> corpus.keys_counts[0]
-        4
-        >>> corpus.loose_to_compact[2]
-        0
-        >>> corpus.loose_to_compact[3]
+        >>> corpus.n_specials
         2
+
+        The special tokens are mapped to the first compact indices
+        >>> corpus.compact_to_loose[0]
+        -2
+        >>> corpus.compact_to_loose[0] == corpus.specials['skip']
+        True
+        >>> corpus.compact_to_loose[1] == corpus.specials['out_of_vocabulary']
+        True
+        >>> corpus.compact_to_loose[2]  # Most popular token is mapped next
+        2
+        >>> corpus.loose_to_compact[3]  # 2nd most popular token is mapped next
+        4
+        >>> first_non_special = corpus.n_specials
+        >>> corpus.keys_counts[first_non_special] # First normal token
+        4
         """
         # Return the loose keys and counts in descending count order
         # so that the counts arrays is already in compact order
-        self.keys_loose, counts, n_keys = self._get_loose_keys_ordered()
+        self.keys_loose, self.keys_counts, n_keys = self._loose_keys_ordered()
         self.keys_compact = np.arange(n_keys).astype('int32')
-        self.keys_counts = counts
         self.loose_to_compact = {l: c for l, c in
                                  zip(self.keys_loose, self.keys_compact)}
         self.compact_to_loose = {c: l for l, c in
                                  self.loose_to_compact.items()}
+        self.specials_to_compact = {s: self.loose_to_compact[i]
+                                    for s, i in self.specials.items()}
+        self.compact_to_special = {c: s for c, s in
+                                   self.specials_to_compact.items()}
         self._finalized = True
 
     @property
@@ -188,9 +215,9 @@ class Corpus():
         self._check_finalized()
         ret = words_compact.copy()
         if min_replacement is None:
-            min_replacement = self.special['out_of_vocabulary']
+            min_replacement = self.specials['out_of_vocabulary']
         if max_replacement is None:
-            max_replacement = self.special['out_of_vocabulary']
+            max_replacement = self.specials['out_of_vocabulary']
         if min_count:
             # Find first index with count less than min_count
             min_idx = np.argmax(self.keys_counts < min_count)
@@ -226,7 +253,10 @@ class Corpus():
         >>> corpus.finalize()
         >>> compact = corpus.to_compact(word_indices)
         >>> sampled = corpus.subsample_frequent(compact, threshold=1e-2)
-        >>> np.sum(sampled == 0) < np.sum(compact == 0)
+        >>> skip = corpus.specials_to_compact['skip']
+        >>> np.sum(compact == skip)  # No skips in the compact tokens
+        0
+        >>> np.sum(sampled == skip) > 0  # Many skips in the sampled tokens
         True
 
         .. [1] Distributed Representations of Words and Phrases and
@@ -240,7 +270,7 @@ class Corpus():
         prob = fast_replace(words_compact, self.keys_compact, prob)
         draw = np.random.uniform(size=prob.shape)
         ret = words_compact.copy()
-        ret[prob > draw] = self.special['skip']
+        ret[prob > draw] = self.specials_to_compact['skip']
         return ret
 
     def to_compact(self, word_loose):
@@ -258,32 +288,40 @@ class Corpus():
         >>> word_indices = np.random.randint(100, size=1000)
         >>> n_words = len(np.unique(word_indices))
         >>> corpus.update_word_count(word_indices)
-        >>> corpus.finalize()  # any word indices above 99 will be filtered
+        >>> corpus.finalize()
         >>> word_compact = corpus.to_compact(word_indices)
-        >>> np.argmax(np.bincount(word_compact)) == 0
-        True
 
-        The most common word in the training set will be mapped to zero.
+        The most common word in the training set will be mapped to be
+        right after all the special tokens, so 2 in this case.
+        >>> np.argmax(np.bincount(word_compact)) == 2
+        True
         >>> most_common = np.argmax(np.bincount(word_indices))
-        >>> least_common = np.argmin(np.bincount(word_indices))
-        >>> corpus.loose_to_compact[most_common] == 0
+        >>> corpus.loose_to_compact[most_common] == 2
         True
 
-        Out of vocabulary indices will be mapped to -1.
+        Out of vocabulary indices will be mapped to 1
         >>> word_indices = np.random.randint(150, size=1000)
-        >>> word_compact = corpus.to_compact(word_indices)
-        >>> -1 in word_compact
+        >>> word_compact_oov = corpus.to_compact(word_indices)
+        >>> oov = corpus.specials_to_compact['out_of_vocabulary']
+        >>> oov
+        1
+        >>> oov in word_compact
+        False
+        >>> oov in word_compact_oov
         True
         """
         self._check_finalized()
-        keys = self.keys_loose.copy()
-        reps = self.keys_compact.copy()
+        keys = self.keys_loose
+        reps = self.keys_compact
         uniques = np.unique(word_loose)
         # Find the out of vocab indices
         oov = np.setdiff1d(uniques, keys, assume_unique=True)
+        oov_token = self.specials_to_compact['out_of_vocabulary']
         keys = np.concatenate((keys, oov))
-        reps = np.concatenate((reps, np.zeros_like(oov) - 1))
+        reps = np.concatenate((reps, np.zeros_like(oov) + oov_token))
         compact = fast_replace(word_loose, keys, reps)
+        msg = "Error: all compact indices should be non-negative"
+        assert compact.min() >= 0, msg
         return compact
 
     def to_loose(self, word_compact):
@@ -307,12 +345,10 @@ class Corpus():
         uniques = np.unique(word_compact)
         # Find the out of vocab indices
         oov = np.setdiff1d(uniques, self.keys_compact, assume_unique=True)
-        msg = "Found keys in `word_compact` not present in the corpus. "
-        msg += " Is this actually a compacted array?"
+        msg = "Found keys in `word_compact` not present in the"
+        msg += "training corpus. Is this actually a compacted array?"
         assert np.all(oov < 0), msg
         loose = fast_replace(word_compact, self.keys_compact, self.keys_loose)
-        special = word_compact < 0
-        loose[special] = word_compact[special]
         return loose
 
 
