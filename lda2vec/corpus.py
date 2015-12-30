@@ -22,16 +22,16 @@ class Corpus():
         before any filtering and subsampling operations can happen.
 
         >>> corpus = Corpus()
-        >>> words_raw = np.arange(25).reshape((5, 5))
+        >>> words_raw = np.random.randint(100, size=25)
         >>> corpus.update_word_count(words_raw)
         >>> corpus.finalize()
         >>> words_compact = corpus.to_compact(words_raw)
-        >>> words_pruned = corpus.filter_count(words_compact, min_count=20)
+        >>> words_pruned = corpus.filter_count(words_compact, min_count=2)
         >>> # words_sub = corpus.subsample_frequent(words_pruned, thresh=1e-5)
         >>> words_loose = corpus.to_loose(words_pruned)
         >>> not_oov = words_loose > -1
-        >>> print(words_loose[not_oov], words_raw[not_oov])
         >>> np.all(words_loose[not_oov] == words_raw[not_oov])
+        True
         """
         self.counts_loose = defaultdict(int)
         self._finalized = False
@@ -262,6 +262,8 @@ class Corpus():
         msg += " Is this actually a compacted array?"
         assert np.all(oov < 0), msg
         loose = fast_replace(word_compact, self.keys_compact, self.keys_loose)
+        special = word_compact < 0
+        loose[special] = word_compact[special]
         return loose
 
 
