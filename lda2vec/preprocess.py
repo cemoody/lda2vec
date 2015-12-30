@@ -7,7 +7,7 @@ import numpy as np
 nlp = None
 
 
-def tokenize(texts, max_length, pad=-1):
+def tokenize(texts, max_length, pad=-1, **kwargs):
     """ Uses spaCy to quickly tokenize text and return an array
     of indices.
 
@@ -25,6 +25,9 @@ def tokenize(texts, max_length, pad=-1):
         shorter then this number it will be padded to this length.
     pad : int, optional
         Short documents will be padded with this variable up until max_length.
+    kwargs : dict, optional
+        Any further argument will be sent to the spaCy tokenizer. For extra
+        speed consider setting tag=False, parse=False, entity=False.
 
     Returns
     -------
@@ -52,7 +55,7 @@ def tokenize(texts, max_length, pad=-1):
     data = np.zeros((len(texts), max_length), dtype='int32')
     data[:] = pad
     for row, text in enumerate(texts):
-        doc = nlp(text)
+        doc = nlp(text, **kwargs)
         dat = doc.to_array([LOWER]).astype('int32')
         length = min(len(dat), max_length)
         data[row, :length] = dat[:length, :].ravel()
@@ -62,6 +65,7 @@ def tokenize(texts, max_length, pad=-1):
     assert pad not in vocab, msg
     vocab[pad] = None
     return data, counts, vocab
+
 
 if __name__ == "__main__":
     import doctest
