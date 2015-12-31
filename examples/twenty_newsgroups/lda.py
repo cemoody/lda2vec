@@ -6,16 +6,17 @@
 
 from lda2vec import preprocess, LDA2Vec, Corpus
 from sklearn.datasets import fetch_20newsgroups
+import numpy as np
 
 # Fetch data
 texts = fetch_20newsgroups(subset='train').data
 # Convert to unicode (spaCy only works with unicode)
 texts = [unicode(d) for d in texts]
 
+# Preprocess data
 max_length = max(len(doc) for doc in texts)
 tokens, vocab = preprocess.tokenize(texts, max_length, tag=False,
                                     parse=False, entity=False)
-
 corpus = Corpus()
 # Make a ranked list of rare vs frequent words
 corpus.update_word_counts(tokens)
@@ -32,7 +33,7 @@ clean = corpus.subsample_frequent(pruned)
 # Get the count for each key
 counts = corpus.keys_counts
 
-
+# Model Parameters
 # Number of documents
 n_docs = len(texts)
 # Number of unique words in the vocabulary
@@ -44,10 +45,9 @@ n_topics = 10
 # Number of times to pass through the data
 epochs = 5
 
-# Initialize the model
+# Fit the model
 model = LDA2Vec(n_words, max_length, n_hidden, counts)
 model.add_component(n_docs, n_topics, name='document id')
-
-# Fit the model
+doc_ids = np.arange(clean.shape[0])
 for _ in range(epochs):
-    model.fit_partial(clean, 1.0)
+    model.fit_partial(clean, 1.0, components=[doc_ids])
