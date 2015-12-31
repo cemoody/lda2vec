@@ -28,21 +28,27 @@ class LDA2Vec(chainer.Chain):
         word to have a structure imposed by the researcher. Each context
         can then also be supervised and predictive.
 
-        Args:
-            n_sent_length (int): Maximum number of words per sentence.
-            n_hidden (int): Number of dimensions in a word vector.
-            counts (dict): A dictionary with keys as word indices and values
-                as counts for that word index.
+        Arguments
+        ---------
+        n_sent_length : int
+            Maximum number of words per sentence.
+        n_hidden : int
+            Number of dimensions in a word vector.
+        counts : dict
+            A dictionary with keys as word indices and values
+            as counts for that word index.
 
         >>> from lda2vec import LDA2Vec
         >>> n_words = 10
         >>> n_docs = 15
         >>> n_sent_length = 5
         >>> n_hidden = 8
+        >>> n_topics = 2
         >>> words = np.random.randint(n_words, size=(n_docs, n_sent_length))
         >>> _, counts = np.unique(words, return_counts=True)
         >>> model = LDA2Vec(n_words, n_sent_length, n_hidden, counts)
-        >>> model.fit_partial(words, 1.0)
+        >>> model.add_component(n_docs, n_topics, name='document id')
+        >>> loss = model.fit_partial(words, components=[np.arange(n_docs)])
         """
         self.logger = logging.getLogger()
         self.logger.setLevel(logging_level)
@@ -70,12 +76,16 @@ class LDA2Vec(chainer.Chain):
         order in which they'll appear when `fit` is called. Optionally make
         it a supervised component.
 
-        Args:
-            n_documents (int): Number of total documents.
-            n_topics (int): Number of topics for this component.
-            loss_type (str): String representing a chainer loss function.
-                Must be in ['sigmoid_cross_entropy', 'softmax_cross_entropy',
-                            'hinge', 'mean_squared_error']
+        Arguments
+        ---------
+        n_documents : int
+            Number of total documents.
+        n_topics : int
+            Number of topics for this component.
+        loss_type : str
+            String representing a chainer loss function. Must be in
+            ['sigmoid_cross_entropy', 'softmax_cross_entropy',
+                        'hinge', 'mean_squared_error']
         """
         em = EmbedMixture(n_documents, n_topics, self.n_hidden)
         transform, loss_func = None, None
@@ -207,22 +217,23 @@ class LDA2Vec(chainer.Chain):
         log_perp = -F.sum(F.log(prob)) / n_words
         return log_perp
 
-    def fit_partial(self, word_matrix, fraction, components=None,
+    def fit_partial(self, word_matrix, fraction=1.0, components=None,
                     targets=None):
         """ Train the latent document-to-topic weights, topic vectors,
         and word vectors on partial subset of the full data.
 
-        Args:
-            word_matrix (numpy int array): Matrix of shape
-                (n_sentences, n_sent_length) where each row is a single
-                sentence, nth column is the nth word in that sentence.
-            fraction (float): Fraction of all words this subset represents.
+        Arguments
+        ---------
+        word_matrix : int array
+            Matrix of shape (n_sentences, n_sent_length) where each row is
+            a single document, nth column is the nth word in that document
+        fraction : float
+            Fraction of all words this subset represents.
         """
         word_matrix, components, targets = self._check_input(word_matrix,
                                                              components,
                                                              targets)
         context = self._context(components)
-        # word_matrix_pruned = self._prune_rare(word_matrix.astype('int32'))
         prior_loss = self._priors(context)
         words_loss = self._unigram(context, word_matrix)
         trget_loss = self._target(components, targets)
