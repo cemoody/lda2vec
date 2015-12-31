@@ -17,6 +17,7 @@ class LDA2Vec(chainer.Chain):
     _loss_types = ['sigmoid_cross_entropy', 'softmax_cross_entropy',
                    'hinge', 'mean_squared_error']
     _initialized = False
+    _n_partial_fits = 0
 
     def __init__(self, n_words, n_sent_length, n_hidden, counts,
                  n_samples=20, grad_clip=5.0, gpu=None, logging_level=0):
@@ -230,6 +231,8 @@ class LDA2Vec(chainer.Chain):
         fraction : float
             Fraction of all words this subset represents.
         """
+        self._n_partial_fits += 1
+        self.logger.info("Computing partial fit #%i" % self._n_partial_fits)
         word_matrix, components, targets = self._check_input(word_matrix,
                                                              components,
                                                              targets)
