@@ -1,0 +1,66 @@
+Add BoW mode
+    Prevent mixing between documents
+Add fit function for all data at once
+Add convergence criterion
+Add visualization tools
+    Add temperature
+
+Add an example script with 20 newsgroups -- LDA
+Add an example script with wiki word2vec data -- w2v
+Add an example script with PTB word2vec data -- w2v
+Add an example script with HN data -- LDA & w2v & ratings
+Add better README
+Add CI & coverage & license icons
+Add model saving
+Add model predicting
+
+Add tracking classes to code
+Add dropout
+Finish filling out docstrings
+Add multiple targets for one component
+Implement skipgram contexts
+Add temperature to perplexity measurements
+
+Add docs on:
+    Installation
+    HN Tutorial
+        Parse document into vector
+        Setup LDA for document
+        Mesure perplexity
+        Visualize topics
+        Add supervised component
+        Mesure perplexity
+        Visualize topics
+        Add another component for time
+        Mesure perplexity
+        Visualize topics
+    Data formats
+        Loose
+        Compact
+        Flat
+    Contexts
+        Categorical contexts
+        Other contexts TBA
+    Targets
+        RMSE
+        Logistic
+        Softmax
+    Advanced
+        Options
+            GPU
+            Gradient Clipping
+            Online learning, fraction argument
+        Logging progress
+        Perplexity
+    
+Done:
+    Add logger
+    Add fake data generator
+    Add perplexity measurements
+    Add tracking utility
+    Add utilities for converting corpora
+    Put license
+    Add masks / skips / pads
+    Add reindexing on the fly
+    Convert docstrings to numpy format
+    Implement corpus loose to dense and vice versa
