@@ -37,7 +37,7 @@ def test_compute_perplexity():
     assert diff < 1e-3, msg
 
 
-def component(model, words, partial=True, name=None, n_comp=1, itrs=5):
+def component(partial=True, name=None, n_comp=1, itrs=5):
     n_topics = 2
     model, words, doc_ids = generate()
     n_docs = doc_ids.max() + 1
@@ -64,24 +64,36 @@ def component(model, words, partial=True, name=None, n_comp=1, itrs=5):
 
 
 def test_single_component_no_name():
-    model, words, doc_ids = generate()
-    component(model, words)
-    component(model, words, partial=True)
+    component()
+    component(partial=True)
 
 
 def test_single_component_named():
-    model, words, doc_ids = generate()
-    component(model, words, name="named_layer")
-    component(model, words, name="named_layer", partial=True)
+    component(name="named_layer")
+    component(name="named_layer", partial=True)
 
 
 def test_multiple_components_no_names():
-    model, words, doc_ids = generate()
-    component(model, words, n_comp=3)
-    component(model, words, n_comp=3, partial=True)
+    component(n_comp=3)
+    component(n_comp=3, partial=True)
 
 
 def test_multiple_components_named():
+    component(name="named_layer", n_comp=3)
+    component(name="named_layer", n_comp=3, partial=True)
+
+
+def entropy(p):
+    return -np.sum(p * np.log(p))
+
+
+def test_log_prob_words():
+    n_topics = 2
     model, words, doc_ids = generate()
-    component(model, words, name="named_layer", n_comp=3)
-    component(model, words, name="named_layer", n_comp=3, partial=True)
+    n_docs = doc_ids.max() + 1
+    model.add_component(n_docs, n_topics)
+    comp = np.zeros(1).astype('int32')
+    low = model.log_prob_words(comp, temperature=1e-2).data
+    high = model.log_prob_words(comp, temperature=1e6).data
+    msg = "Lower temperatures should be lower entropy and more concentrated"
+    assert entropy(np.exp(low)) < entropy(np.exp(high)), msg

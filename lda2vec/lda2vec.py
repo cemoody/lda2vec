@@ -112,7 +112,7 @@ class LDA2Vec(chainer.Chain):
         super(LDA2Vec, self).__init__(**kwargs)
         self._setup()
         self._finalized = True
-        self.logger.info("Finished initializing class")
+        self.logger.info("Finalized the class")
 
     def _setup(self):
         optimizer = optimizers.Adam()
@@ -170,7 +170,8 @@ class LDA2Vec(chainer.Chain):
         return losses
 
     def _check_input(self, word_matrix, components, targets):
-        word_matrix = word_matrix.astype('int32')
+        if word_matrix is not None:
+            word_matrix = word_matrix.astype('int32')
         if self._finalized is False:
             self.finalize()
         if isinstance(components, (np.ndarray, np.generic)):
@@ -195,11 +196,13 @@ class LDA2Vec(chainer.Chain):
         for i, component in enumerate(components):
             msg = "Number of rows in word matrix unequal"
             msg += "to that in component array %i" % i
-            assert word_matrix.shape[0] == component.data.shape[0], msg
+            if word_matrix is not None:
+                assert word_matrix.shape[0] == component.data.shape[0], msg
         for i, target in enumerate(targets):
             msg = "Number of rows in word matrix unequal"
             msg += "to that in target array %i" % i
-            assert word_matrix.shape[0] == target.data.shape[0], msg
+            if word_matrix is not None:
+                assert word_matrix.shape[0] == target.data.shape[0], msg
         return word_matrix, components, targets
 
     def _log_prob_words(self, context, temperature=1.0):
@@ -237,9 +240,12 @@ class LDA2Vec(chainer.Chain):
         ---------
         http://qpleple.com/perplexity-to-evaluate-topic-models/
         """
+        _, component, _ = self._check_input(None, component, None)
         msg = "Temperature must be non-negative"
         assert temperature > 0.0, msg
-        context = self._context(self.xp.asarray(component))
+        if self._finalized is False:
+            self.finalize()
+        context = self._context(component)
         log_prob = self._log_prob_words(context, temperature=temperature)
         return log_prob
 
