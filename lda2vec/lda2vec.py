@@ -49,7 +49,7 @@ class LDA2Vec(chainer.Chain):
         >>> model.add_component(n_docs, n_topics, name='document id')
         >>> model.finalize()
         >>> doc_ids = np.arange(n_obs) % n_docs
-        >>> loss = model.fit_partial(words, components=doc_ids)
+        >>> loss = model.fit_partial(words, 1.0, components=doc_ids)
         """
         self.logger = logging.getLogger()
         self.logger.setLevel(logging_level)
@@ -222,7 +222,7 @@ class LDA2Vec(chainer.Chain):
         log_perp = -F.sum(F.log(prob)) / n_words
         return log_perp
 
-    def fit_partial(self, words_flat, fraction=1.0, components=None,
+    def fit_partial(self, words_flat, fraction, components=None,
                     targets=None):
         """ Train the latent document-to-topic weights, topic vectors,
         and word vectors on partial subset of the full data.
@@ -266,6 +266,34 @@ class LDA2Vec(chainer.Chain):
         self.logger.info("Partial fit loss: %1.1e" % total_loss.data)
         return total_loss
 
+    def fit(self, words_flat, components=None, targets=None, epochs=10):
+        """ Train the latent document-to-topic weights, topic vectors,
+        and word vectors on the full dataset.
+
+        Arguments
+        ---------
+        words_flat : int array
+            A flattened 1D array of shape (n_observations) where each row is
+            in a single document.
+        fraction : float
+            Fraction of all words this subset represents. If thi
+        components : int array
+            List of arrays. Each array is aligned with `words_flat`. Each
+            array details the component a word is associated with, for example
+            a document index or a user index.
+        targets : float or int arrays
+            This is usually side information related to a document. Latent
+            components are chosen so that targets will correlated with them.
+            For example, this could be the sold outcome of a client comment
+            or the number of votes a comment receives.
+        """
+        fraction = 0.01
+        n_chunk = int(words_flat.shape[0] * fraction)
+        for epoch in range(epochs):
+            args = components + targets
+            for chunk, doc_id in _chunks(n_chunk, words_flat, *args):
+                self.fit_partial(chunk, fraction, components=[doc_id])
+
     def term_topics(self, component):
         data = {'topic_term_dists': None,  # phi, [n_topics, n_words]
                 'doc_topic_dists': None,  # theta, [n_docs, n_topics]
@@ -274,3 +302,10 @@ class LDA2Vec(chainer.Chain):
                 'term_frequency': None
                 }
         return data
+
+
+def _chunks(n, *args):
+    """Yield successive n-sized chunks from l."""
+    # From stackoverflow question 312443
+    for i in xrange(0, len(args[0]), n):
+        yield [a[i:i+n] for a in args]

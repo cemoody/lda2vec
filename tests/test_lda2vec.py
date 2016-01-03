@@ -37,7 +37,7 @@ def test_compute_perplexity():
     assert diff < 1e-3, msg
 
 
-def component(model, words, name=None, n_comp=1, itrs=5):
+def component(model, words, partial=True, name=None, n_comp=1, itrs=5):
     n_topics = 2
     model, words, doc_ids = generate()
     n_docs = doc_ids.max() + 1
@@ -51,8 +51,12 @@ def component(model, words, name=None, n_comp=1, itrs=5):
     # Increase learning rate
     # model._optimizer.alpha = 1e-1
     # Test perplexity decreases
-    for _ in range(itrs):
-        model.fit_partial(words, 1.0, components=components)
+    if partial:
+        for _ in range(itrs):
+            model.fit_partial(words, 1.0, components=components)
+    else:
+        for _ in range(itrs):
+            model.fit(words, components=components)
     perp_fit = model.compute_log_perplexity(words, components=components)
     msg = "Perplexity should improve with a fit model"
     assert perp_fit.data < perp_orig.data, msg
@@ -62,18 +66,22 @@ def component(model, words, name=None, n_comp=1, itrs=5):
 def test_single_component_no_name():
     model, words, doc_ids = generate()
     component(model, words)
+    component(model, words, partial=True)
 
 
 def test_single_component_named():
     model, words, doc_ids = generate()
     component(model, words, name="named_layer")
+    component(model, words, name="named_layer", partial=True)
 
 
 def test_multiple_components_no_names():
     model, words, doc_ids = generate()
     component(model, words, n_comp=3)
+    component(model, words, n_comp=3, partial=True)
 
 
 def test_multiple_components_named():
     model, words, doc_ids = generate()
     component(model, words, name="named_layer", n_comp=3)
+    component(model, words, name="named_layer", n_comp=3, partial=True)
