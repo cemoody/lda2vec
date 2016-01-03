@@ -202,7 +202,49 @@ class LDA2Vec(chainer.Chain):
             assert word_matrix.shape[0] == target.data.shape[0], msg
         return word_matrix, components, targets
 
-    def compute_log_perplexity(self, words_flat, components=None):
+    def _log_prob_words(self, context, temperature=1.0):
+        """ This calculates an softmax over the vocabulary as a function
+        of the dot product of context and word.
+        """
+        dot = F.matmul(context, F.transpose(self.loss_func.W))
+        prob = F.softmax(dot / temperature)
+        return F.log(prob)
+
+    def log_prob_words(self, component, temperature=1.0):
+        """ Compute the probability of each word given context vectors.
+        With negative sampling a full softmax distribution is not calculated
+        and so an approximation is picking words by similarity to the context.
+        The probabillity of picking a word increases with the dot product of
+        the word and context. The `temperature` modulates what a 'high'
+        similarity is. Temperatures large compared to the dot product
+        will supress differences, and thus the probability will be spread out
+        all words. At low temperatures the differences are exagerated, and
+        as temperature approaches zero a single word will take the full
+        probability.
+
+        .. :math:`p\_word = softmax(context \cdot word / temperature)
+
+        Arguments
+        ---------
+        component : int array
+            Array of components that compute the context
+        temperature : float, default=1.0
+            Inifinite temperature encourages all probability to spread out
+            evenly, but zero temperature encourages the probability to be
+            mapped to a single word.
+
+        See also:
+        ---------
+        http://qpleple.com/perplexity-to-evaluate-topic-models/
+        """
+        msg = "Temperature must be non-negative"
+        assert temperature > 0.0, msg
+        context = self._context(self.xp.asarray(component))
+        log_prob = self._log_prob_words(context, temperature=temperature)
+        return log_prob
+
+    def compute_log_perplexity(self, words_flat, components=None,
+                               temperature=1.0):
         """ Compute the log perplexity given the components and a validation
         set of words.
 
@@ -211,15 +253,26 @@ class LDA2Vec(chainer.Chain):
         We ignore the negative sampling part of the objective and focus on
         the positive component to rpedict perplexity:
         :math:`p(w_d)=\sigma(x^\\top w_p)`
+
+        Arguments
+        ---------
+        words_flat : int array
+            Array of ground truth (correct) words
+        components : list of int arrays
+            Each component in this array represents the context behind
+            every word
+        temperature : float
+            High temperature spread probability over all words, low
+            temperatures concentrate it on the most common word.
         """
-        words_flat, components, targets = self._check_input(words_flat,
-                                                            components,
-                                                            None)
+        words_flat, components, _ = self._check_input(words_flat,
+                                                      components,
+                                                      None)
         context = self._context(components)
         n_words = words_flat.shape[0]
-        prob = F.softmax(F.matmul(context, F.transpose(self.loss_func.W)))
+        log_prob = self._log_prob_words(context, temperature=temperature)
         # http://qpleple.com/perplexity-to-evaluate-topic-models/
-        log_perp = -F.sum(F.log(prob)) / n_words
+        log_perp = -F.sum(log_prob) / n_words
         return log_perp
 
     def fit_partial(self, words_flat, fraction, components=None,
@@ -294,12 +347,26 @@ class LDA2Vec(chainer.Chain):
             for chunk, doc_id in _chunks(n_chunk, words_flat, *args):
                 self.fit_partial(chunk, fraction, components=[doc_id])
 
-    def term_topics(self, component):
-        data = {'topic_term_dists': None,  # phi, [n_topics, n_words]
-                'doc_topic_dists': None,  # theta, [n_docs, n_topics]
-                'doc_lengths': None,
-                'vocab': None,
-                'term_frequency': None
+    def term_topics(self, component, temperature=1.0):
+        """ Collects a dictionary of word, document and topic distributions.
+
+        """
+        # Collect topic-to-word distributions, e.g. phi
+        # This is computed like p_word = softmax(context * word / temperature)
+        topic_to_word = None
+        # Collect document-to-topic distributions, e.g. theta
+        doc_to_topic = None
+        # Collect document lengths
+        doc_lengths = None
+        # Collect vocabulary list
+        vocab = None
+        # Collect word frequency
+        term_frequency = None
+        data = {'topic_term_dists': topic_to_word,
+                'doc_topic_dists': doc_to_topic,
+                'doc_lengths': doc_lengths,
+                'vocab': vocab,
+                'term_frequency': term_frequency,
                 }
         return data
 

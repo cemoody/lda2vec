@@ -1,5 +1,3 @@
-Add fit function for all data at once
-Add convergence criterion
 Add visualization tools
 
 Add an example script with 20 newsgroups -- LDA
@@ -24,6 +22,7 @@ Implement skipgram contexts
     Prevent mixing between documents
 Add temperature to perplexity measurements
 Add temperature to viz
+Add convergence criterion
 
 Add docs on:
     Installation
@@ -69,3 +68,4 @@ Done:
     Add reindexing on the fly
     Convert docstrings to numpy format
     Implement corpus loose to dense and vice versa
+    Add fit function for all data at once
