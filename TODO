@@ -1,5 +1,3 @@
-Add BoW mode
-    Prevent mixing between documents
 Add fit function for all data at once
 Add convergence criterion
 Add visualization tools
@@ -23,6 +21,7 @@ Add dropout
 Finish filling out docstrings
 Add multiple targets for one component
 Implement skipgram contexts
+    Prevent mixing between documents
 Add temperature to perplexity measurements
 Add temperature to viz
 
@@ -59,6 +58,7 @@ Add docs on:
         Perplexity
     
 Done:
+    Add BoW mode
     Add logger
     Add fake data generator
     Add perplexity measurements

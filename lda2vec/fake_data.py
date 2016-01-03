@@ -35,10 +35,32 @@ def sample(values, probabilities, size):
     return values[np.digitize(random_sample(size), bins)]
 
 
-def fake_data(n_docs, n_words, n_sent_length, n_hidden):
+def fake_data(n_docs, n_words, n_sent_length, n_topics):
+    """ Generate latent topic vectors for words and documents
+    and then for each document, draw a sentence. Draw each word
+    document with probability proportional to the dot product and
+    normalized with a softmax.
+
+    Arguments
+    ---------
+    n_docs : int
+        Number of documents
+    n_words : int
+        Number of words in the vocabulary
+    n_sent_length : int
+        Number of words to draw for each document
+    n_topics : int
+        Number of topics that a single document can belong to.
+
+    Returns
+    -------
+    sentences : int array
+        Array of word indices of shape (n_docs, n_sent_length).
+
+    """
     # These are log ratios for the doc & word topics
-    doc_topics = orthogonal_matrix([n_docs, n_hidden])
-    wrd_topics = orthogonal_matrix([n_hidden, n_words])
+    doc_topics = orthogonal_matrix([n_docs, n_topics])
+    wrd_topics = orthogonal_matrix([n_topics, n_words])
     # Multiply log ratios and softmax to get prob of word in doc
     doc_to_wrds = softmax(np.dot(doc_topics, wrd_topics))
     # Now sample from doc_to_wrd to get realizations

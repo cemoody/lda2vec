@@ -4,7 +4,6 @@ import logging
 import chainer
 import chainer.links as L
 import chainer.functions as F
-from chainer import cuda
 from chainer import optimizers
 from chainer import Variable
 
@@ -171,10 +170,6 @@ class LDA2Vec(chainer.Chain):
         return losses
 
     def _check_input(self, word_matrix, components, targets):
-        if self.xp == cuda.cupy:
-            self.logger.info("Using CuPy on the GPU")
-        else:
-            self.logger.info("Using NumPy on the CPU")
         word_matrix = word_matrix.astype('int32')
         if self._finalized is False:
             self.finalize()
@@ -207,7 +202,7 @@ class LDA2Vec(chainer.Chain):
             assert word_matrix.shape[0] == target.data.shape[0], msg
         return word_matrix, components, targets
 
-    def compute_log_perplexity(self, word_matrix, components=None):
+    def compute_log_perplexity(self, words_flat, components=None):
         """ Compute the log perplexity given the components and a validation
         set of words.
 
@@ -217,11 +212,11 @@ class LDA2Vec(chainer.Chain):
         the positive component to rpedict perplexity:
         :math:`p(w_d)=\sigma(x^\\top w_p)`
         """
-        word_matrix, components, targets = self._check_input(word_matrix,
-                                                             components,
-                                                             None)
+        words_flat, components, targets = self._check_input(words_flat,
+                                                            components,
+                                                            None)
         context = self._context(components)
-        n_words = np.prod(word_matrix.shape)
+        n_words = words_flat.shape[0]
         prob = F.softmax(F.matmul(context, F.transpose(self.loss_func.W)))
         # http://qpleple.com/perplexity-to-evaluate-topic-models/
         log_perp = -F.sum(F.log(prob)) / n_words

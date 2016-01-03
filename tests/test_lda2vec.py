@@ -12,13 +12,17 @@ import numpy as np
 
 def generate(n_docs=300, n_words=10, n_sent_length=5, n_hidden=8):
     words = fake_data.fake_data(n_docs, n_words, n_sent_length, n_hidden)
-    _, counts = np.unique(words, return_counts=True)
-    model = LDA2Vec(n_words, n_sent_length, n_hidden, counts, n_samples=1)
-    return model, words
+    words_flat = words.ravel()
+    doc_ids = np.repeat(np.arange(words.shape[0]).astype('int32'),
+                        n_sent_length)
+    doc_ids = doc_ids.ravel()
+    _, counts = np.unique(words_flat, return_counts=True)
+    model = LDA2Vec(n_words, n_hidden, counts, n_samples=1)
+    return model, words_flat, doc_ids
 
 
 def test_compute_perplexity():
-    model, words = generate()
+    model, words, doc_ids = generate()
     n_topics = 2
     n_docs = words.shape[0]
     n_wrds = words.max() + 1
@@ -35,14 +39,14 @@ def test_compute_perplexity():
 
 def component(model, words, name=None, n_comp=1, itrs=5):
     n_topics = 2
-    n_docs = words.shape[0]
-    model, words = generate()
+    model, words, doc_ids = generate()
+    n_docs = doc_ids.max() + 1
     components = []
     for j in range(n_comp):
         if name:
             name += str(j)
         model.add_component(n_docs, n_topics, name=name)
-        components.append(np.arange(n_docs).astype('int32'))
+        components.append(doc_ids)
     perp_orig = model.compute_log_perplexity(words, components=components)
     # Increase learning rate
     # model._optimizer.alpha = 1e-1
@@ -56,20 +60,20 @@ def component(model, words, name=None, n_comp=1, itrs=5):
 
 
 def test_single_component_no_name():
-    model, words = generate()
+    model, words, doc_ids = generate()
     component(model, words)
 
 
 def test_single_component_named():
-    model, words = generate()
+    model, words, doc_ids = generate()
     component(model, words, name="named_layer")
 
 
 def test_multiple_components_no_names():
-    model, words = generate()
+    model, words, doc_ids = generate()
     component(model, words, n_comp=3)
 
 
 def test_multiple_components_named():
-    model, words = generate()
+    model, words, doc_ids = generate()
     component(model, words, name="named_layer", n_comp=3)
