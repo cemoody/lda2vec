@@ -1,5 +1,4 @@
 import numpy as np
-import six
 import logging
 
 import chainer
@@ -16,11 +15,11 @@ from dirichlet_likelihood import dirichlet_likelihood
 class LDA2Vec(chainer.Chain):
     _loss_types = ['sigmoid_cross_entropy', 'softmax_cross_entropy',
                    'hinge', 'mean_squared_error']
-    _initialized = False
+    _finalized = False
     _n_partial_fits = 0
 
-    def __init__(self, n_words, n_sent_length, n_hidden, counts,
-                 n_samples=20, grad_clip=5.0, gpu=None, logging_level=0):
+    def __init__(self, n_words, n_hidden, counts, n_samples=20, grad_clip=5.0,
+                 gpu=None, logging_level=0):
         """ LDA-like model with multiple contexts and supervised labels.
         In the LDA generative model words are sampled from a topic vector.
         In this model, words are drawn from a combination of contexts not
@@ -31,8 +30,8 @@ class LDA2Vec(chainer.Chain):
 
         Arguments
         ---------
-        n_sent_length : int
-            Maximum number of words per sentence.
+        n_words : int
+            Number of unique words in the vocabulary.
         n_hidden : int
             Number of dimensions in a word vector.
         counts : dict
@@ -42,14 +41,16 @@ class LDA2Vec(chainer.Chain):
         >>> from lda2vec import LDA2Vec
         >>> n_words = 10
         >>> n_docs = 15
-        >>> n_sent_length = 5
         >>> n_hidden = 8
         >>> n_topics = 2
-        >>> words = np.random.randint(n_words, size=(n_docs, n_sent_length))
+        >>> n_obs = 300
+        >>> words = np.random.randint(n_words, size=(n_obs))
         >>> _, counts = np.unique(words, return_counts=True)
-        >>> model = LDA2Vec(n_words, n_sent_length, n_hidden, counts)
+        >>> model = LDA2Vec(n_words, n_hidden, counts)
         >>> model.add_component(n_docs, n_topics, name='document id')
-        >>> loss = model.fit_partial(words, components=[np.arange(n_docs)])
+        >>> model.finalize()
+        >>> doc_ids = np.arange(n_obs) % n_docs
+        >>> loss = model.fit_partial(words, components=doc_ids)
         """
         self.logger = logging.getLogger()
         self.logger.setLevel(logging_level)
@@ -58,15 +59,8 @@ class LDA2Vec(chainer.Chain):
         self.counts = counts
         self.frequency = counts / np.sum(counts)
         self.n_words = n_words
-        self.n_sent_length = n_sent_length
         self.n_hidden = n_hidden
         self.n_samples = n_samples
-        if gpu >= 0:
-            self._xp = cuda.cupy
-            self.logger.info("Using CUPY on the GPU")
-        else:
-            self._xp = np
-            self.logger.info("Using NumPy on the CPU")
         self.grad_clip = grad_clip
         self.components = {}
         self.component_names = []
@@ -104,7 +98,7 @@ class LDA2Vec(chainer.Chain):
         self.components[name] = (em, transform, loss_func)
         self.component_names.append(name)
 
-    def initialize(self):
+    def finalize(self):
         loss_func = L.NegativeSampling(self.n_hidden, self.counts,
                                        self.n_samples)
         data = np.random.randn(len(self.counts), self.n_hidden)
@@ -118,7 +112,7 @@ class LDA2Vec(chainer.Chain):
                 kwargs[name + '_linear'] = transform
         super(LDA2Vec, self).__init__(**kwargs)
         self._setup()
-        self._initialized = True
+        self._finalized = True
         self.logger.info("Finished initializing class")
 
     def _setup(self):
@@ -146,14 +140,11 @@ class LDA2Vec(chainer.Chain):
             loss = dl if loss is None else dl + loss
         return loss
 
-    def _unigram(self, context, words, **kwargs):
+    def _unigram(self, context, words_flat, window=10, **kwargs):
         """ Given context, predict words."""
-        total_loss = None
-        for column in six.moves.range(self.n_sent_length):
-            target = Variable(self._xp.asarray(words[:, column]))
-            loss = self.loss_func(context, target, **kwargs)
-            total_loss = loss if total_loss is None else total_loss + loss
-        return total_loss
+        predict_word = Variable(self.xp.asarray(words_flat))
+        loss = self.loss_func(context, predict_word, **kwargs)
+        return loss
 
     def _skipgram(self, context, words):
         """ Given context + every word, predict every other word"""
@@ -180,15 +171,25 @@ class LDA2Vec(chainer.Chain):
         return losses
 
     def _check_input(self, word_matrix, components, targets):
+        if self.xp == cuda.cupy:
+            self.logger.info("Using CuPy on the GPU")
+        else:
+            self.logger.info("Using NumPy on the CPU")
         word_matrix = word_matrix.astype('int32')
-        if self._initialized is False:
-            self.initialize()
+        if self._finalized is False:
+            self.finalize()
+        if isinstance(components, (np.ndarray, np.generic)):
+            # If we pass in a single component, wrap it into a list
+            components = [components]
+        if isinstance(targets, (np.ndarray, np.generic)):
+            # If we pass in a single target, wrap it into a list
+            targets = [targets]
         if components is None:
             components = []
         else:
             msg = "Number of components not equal to initialized components"
             assert len(components) == len(self.components), msg
-            components = [Variable(self._xp.asarray(c.astype('int32')))
+            components = [Variable(self.xp.asarray(c.astype('int32')))
                           for c in components]
         if targets is None:
             targets = []
@@ -196,6 +197,14 @@ class LDA2Vec(chainer.Chain):
             msg = "Number of targets not equal to initialized no. of targets"
             vals = self.components.values()
             assert len(targets) == sum([c[2] is not None for c in vals])
+        for i, component in enumerate(components):
+            msg = "Number of rows in word matrix unequal"
+            msg += "to that in component array %i" % i
+            assert word_matrix.shape[0] == component.data.shape[0], msg
+        for i, target in enumerate(targets):
+            msg = "Number of rows in word matrix unequal"
+            msg += "to that in target array %i" % i
+            assert word_matrix.shape[0] == target.data.shape[0], msg
         return word_matrix, components, targets
 
     def compute_log_perplexity(self, word_matrix, components=None):
@@ -218,27 +227,36 @@ class LDA2Vec(chainer.Chain):
         log_perp = -F.sum(F.log(prob)) / n_words
         return log_perp
 
-    def fit_partial(self, word_matrix, fraction=1.0, components=None,
+    def fit_partial(self, words_flat, fraction=1.0, components=None,
                     targets=None):
         """ Train the latent document-to-topic weights, topic vectors,
         and word vectors on partial subset of the full data.
 
         Arguments
         ---------
-        word_matrix : int array
-            Matrix of shape (n_sentences, n_sent_length) where each row is
-            a single document, nth column is the nth word in that document
+        words_flat : int array
+            A flattened 1D array of shape (n_observations) where each row is
+            in a single document.
         fraction : float
-            Fraction of all words this subset represents.
+            Fraction of all words this subset represents. If thi
+        components : int array
+            List of arrays. Each array is aligned with `words_flat`. Each
+            array details the component a word is associated with, for example
+            a document index or a user index.
+        targets : float or int arrays
+            This is usually side information related to a document. Latent
+            components are chosen so that targets will correlated with them.
+            For example, this could be the sold outcome of a client comment
+            or the number of votes a comment receives.
         """
         self._n_partial_fits += 1
         self.logger.info("Computing partial fit #%i" % self._n_partial_fits)
-        word_matrix, components, targets = self._check_input(word_matrix,
-                                                             components,
-                                                             targets)
+        words_flat, components, targets = self._check_input(words_flat,
+                                                            components,
+                                                            targets)
         context = self._context(components)
         prior_loss = self._priors(context)
-        words_loss = self._unigram(context, word_matrix)
+        words_loss = self._unigram(context, words_flat)
         trget_loss = self._target(components, targets)
         # Loss is composed of loss from predicting the word given context,
         # the target given the context, and the loss due to the prior

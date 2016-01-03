@@ -3,9 +3,11 @@ Add BoW mode
 Add fit function for all data at once
 Add convergence criterion
 Add visualization tools
-    Add temperature
 
 Add an example script with 20 newsgroups -- LDA
+    Add visualization for topic-word
+    Add examples of specific documents
+
 Add an example script with wiki word2vec data -- w2v
 Add an example script with PTB word2vec data -- w2v
 Add an example script with HN data -- LDA & w2v & ratings
@@ -14,12 +16,15 @@ Add CI & coverage & license icons
 Add model saving
 Add model predicting
 
+Add doctets to lda2vec main classes
+
 Add tracking classes to code
 Add dropout
 Finish filling out docstrings
 Add multiple targets for one component
 Implement skipgram contexts
 Add temperature to perplexity measurements
+Add temperature to viz
 
 Add docs on:
     Installation
