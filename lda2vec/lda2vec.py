@@ -336,7 +336,7 @@ class LDA2Vec(chainer.Chain):
         total_loss.backward()
         # Propagate gradients
         self._optimizer.update()
-        self.logger.info("Partial fit loss: %1.1e" % total_loss.data)
+        self.logger.info("Partial fit loss: %1.5e" % total_loss.data)
         return total_loss
 
     def fit(self, words_flat, components=None, targets=None,

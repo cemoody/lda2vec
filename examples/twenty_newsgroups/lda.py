@@ -6,6 +6,7 @@
 
 from lda2vec import preprocess, LDA2Vec, Corpus
 from sklearn.datasets import fetch_20newsgroups
+from chainer import serializers
 import numpy as np
 import logging
 
@@ -34,7 +35,8 @@ pruned = corpus.filter_count(compact, min_count=5)
 # downsample the most prevalent words
 clean = corpus.subsample_frequent(pruned)
 # Now flatten a 2D array of document per row and word position
-# per column to a 1D array of words
+# per column to a 1D array of words. This will also remove skips
+# and OoV words
 doc_ids = np.arange(clean.shape[0])
 flattened, (doc_ids,) = corpus.compact_to_flat(clean, doc_ids)
 # Get the count for each key
@@ -48,11 +50,15 @@ n_words = flattened.max() + 1
 # Number of dimensions in a single word vector
 n_hidden = 128
 # Number of topics to fit
-n_topics = 10
+n_topics = 20
 # Number of times to pass through the data
-epochs = 5
+epochs = 20
 
 # Fit the model
 model = LDA2Vec(n_words, n_hidden, counts)
 model.add_component(n_docs, n_topics, name='document id')
-model.fit(flattened, components=[doc_ids], fraction=1e-3)
+model.finalize()
+# Move the model to the GPU makes it ~50x faster
+model.to_gpu()
+model.fit(flattened, components=[doc_ids], fraction=1e-3, epochs=epochs)
+serializers.save_hdf5('model.hdf5', model)
