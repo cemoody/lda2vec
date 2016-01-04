@@ -10,7 +10,7 @@ lda2vec: Tools for interpreting natural language
 .. image:: https://travis-ci.org/cemoody/lda2vec.svg?branch=master
     :target: https://travis-ci.org/cemoody/lda2vec
 
-.. image:: https://codecov.io/github/cemoody/lda2vec/coverage.svg?branch=master
+.. image:: https://img.shields.io/badge/coverage-89%25-green.svg
     :target: https://travis-ci.org/cemoody/lda2vec
 
 .. image:: https://img.shields.io/twitter/follow/chrisemoody.svg?style=social
