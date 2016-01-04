@@ -366,7 +366,7 @@ class LDA2Vec(chainer.Chain):
             for chunk, doc_id in _chunks(n_chunk, words_flat, *args):
                 self.fit_partial(chunk, fraction, components=[doc_id])
 
-    def prepare_topics(self, component_name, index_to_word, temperature=1.0):
+    def prepare_topics(self, component_name, vocab, temperature=1.0):
         """ Collects a dictionary of word, document and topic distributions.
 
         Arguments
@@ -398,13 +398,11 @@ class LDA2Vec(chainer.Chain):
             fv = Variable(self.xp.asarray(factor_vector))
             factor_to_word = self._log_prob_words(fv, temperature=temperature)
             topic_to_word.append(factor_to_word)
-            assert len(index_to_word) == factor_to_word.shape[1]
+            assert len(vocab) == factor_to_word.shape[1]
         # Collect document-to-topic distributions, e.g. theta
         doc_to_topic = components.weights.W
         # Collect document lengths
         doc_lengths = self.component_counts[component_name]
-        # Collect vocabulary list
-        vocab = index_to_word
         # Collect word frequency
         term_frequency = self.counts
         data = {'topic_term_dists': topic_to_word,
