@@ -1,4 +1,3 @@
-Add readthedocs support
 
 Add an example script with 20 newsgroups -- LDA
     Add visualization for topic-word
@@ -72,3 +71,4 @@ Done:
     Implement corpus loose to dense and vice versa
     Add fit function for all data at once
     Add CI & coverage & license icons
+    Add readthedocs support

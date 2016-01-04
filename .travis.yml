@@ -20,7 +20,7 @@ install:
     - conda create --yes -n testing python=$TRAVIS_PYTHON_VERSION
     - source activate testing
     - conda install --yes numpy=$NUMPY_VERSION nose pip numba cython scikit-learn h5py
-    - pip install chainer pytest spacy codecov
+    - pip install chainer pytest spacy codecov coveralls
     - python -m spacy.en.download --force all
     - python setup.py install
 
@@ -28,6 +28,6 @@ script:
     - ls
     - pwd
     - env | sort
-    - py.test tests/ lda2vec
+    - py.test --cov=lda2vec tests/ lda2vec
 after_success:
-    - codecov
+    - coveralls
