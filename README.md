@@ -1,5 +1,12 @@
 # lda2vec: Tools for interpreting natural language
 
+.. image:: http://img.shields.io/badge/license-MIT-blue.svg?style=flat
+    :target: https://github.com/cemoody/lda2vec/blob/master/LICENSE
+
+.. image:: https://readthedocs.org/projects/lda2vec/badge/?version=latest
+    :target: http://lda2vec.readthedocs.org/en/latest/?badge=latest
+
+
 
 ## Requirements
 

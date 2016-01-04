@@ -1,0 +1,32 @@
+# Much of this script was adapted from astropy/astropy.
+
+language: python
+
+env:
+    global:
+        - NUMPY_VERSION=1.9
+
+matrix:
+    include:
+        # All the versions of Python.
+        - python: 2.7
+
+before_install:
+    - wget http://repo.continuum.io/miniconda/Miniconda-latest-Linux-x86_64.sh -O miniconda.sh
+    - chmod +x miniconda.sh
+    - ./miniconda.sh -b
+    - export PATH=/home/travis/miniconda2/bin:$PATH
+
+install:
+    - conda create --yes -n testing python=$TRAVIS_PYTHON_VERSION
+    - source activate testing
+    - conda install --yes numpy=$NUMPY_VERSION nose pip numba cython scikit-learn h5py
+    - pip install chainer pytest spacy
+    - python -m spacy.en.download --force all
+    - python setup.py install
+
+script:
+    - ls
+    - pwd
+    - env | sort
+    - py.test tests/ lda2vec
