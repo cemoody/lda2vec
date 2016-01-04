@@ -1,4 +1,5 @@
-# lda2vec: Tools for interpreting natural language
+lda2vec: Tools for interpreting natural language
+=================================================
 
 .. image:: http://img.shields.io/badge/license-MIT-blue.svg?style=flat
     :target: https://github.com/cemoody/lda2vec/blob/master/LICENSE
@@ -8,7 +9,8 @@
 
 
 
-## Requirements
+Requirements
+------------
 
 
 Minimum requirements:
