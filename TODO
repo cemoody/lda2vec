@@ -37,6 +37,7 @@ Add docs on:
         Add another component for time
         Mesure perplexity
         Visualize topics
+        Visualize topics, changing temperature
     Data formats
         Loose
         Compact
@@ -55,6 +56,8 @@ Add docs on:
             Online learning, fraction argument
         Logging progress
         Perplexity
+        Model saving, prediction
+        Dropout fractions
     
 Done:
     Add BoW mode

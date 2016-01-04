@@ -96,6 +96,7 @@ class LDA2Vec(chainer.Chain):
         else:
             self.logger.info("Added component %s" % name)
         self.components[name] = (em, transform, loss_func)
+        self.component_counts[name] = np.zeros(n_documents).astype('int32')
         self.component_names.append(name)
 
     def finalize(self):
@@ -283,10 +284,12 @@ class LDA2Vec(chainer.Chain):
         return log_perp
 
     def _update_comp_counts(self, components):
-        for component in components:
+        if not isinstance(components, list):
+            components = [components, ]
+        for j, component in enumerate(components):
+            name = self.component_names[j]
             uniques, counts = np.unique(component, return_counts=True)
-            for u, c in zip(uniques, counts):
-                self.component_counts[component][u] += c
+            self.component_counts[name][uniques] += counts
 
     def fit_partial(self, words_flat, fraction, components=None,
                     targets=None):
@@ -312,10 +315,10 @@ class LDA2Vec(chainer.Chain):
         """
         self._n_partial_fits += 1
         self.logger.info("Computing partial fit #%i" % self._n_partial_fits)
+        self._update_comp_counts(components)
         words_flat, components, targets = self._check_input(words_flat,
                                                             components,
                                                             targets)
-        self._update_comp_counts(components)
         context = self._context(components)
         prior_loss = self._priors(context)
         words_loss = self._unigram(context, words_flat)
@@ -371,9 +374,9 @@ class LDA2Vec(chainer.Chain):
         component_name : str or int
             If the component was added with a name, then specify the name.
             Otherwise the index for that component.
-        index_to_word : dict
-            Keys must be integers and values the string representation for
-            that word
+        vocab : list of str
+            These must be the strings for words corresponding to
+            indices [0, n_words]
         temperature : float
             Used to calculate the log probability of a word. See log_prob_words
             for a description.
@@ -399,7 +402,7 @@ class LDA2Vec(chainer.Chain):
         # Collect document-to-topic distributions, e.g. theta
         doc_to_topic = components.weights.W
         # Collect document lengths
-        doc_lengths = None
+        doc_lengths = self.component_counts[component_name]
         # Collect vocabulary list
         vocab = index_to_word
         # Collect word frequency
