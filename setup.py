@@ -4,9 +4,9 @@ from distutils.core import setup
 
 
 install_requires = [
-    'chainer',
-    'numpy',
-    'spacy'
+    'chainer>=1.5.1',
+    'numpy>=1.10',
+    'spacy>=0.99'
     'sklearn']
 
 

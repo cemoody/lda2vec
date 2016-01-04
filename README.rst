@@ -17,18 +17,14 @@ Requirements
 
 Minimum requirements:
 
-- Python 2.7.6+, 3.4.3+, 3.5.0+
-- NumPy 1.9
-- Six 1.9
+- Python 2.7+
+- NumPy 1.10+
+- Chainer 1.5.1+
+- spaCy 0.99+
 
 
 Requirements for some features:
 
-
 - CUDA support
-  - CUDA 6.5, 7.0, 7.5
-- cuDNN support
-  - cuDNN v2, v3
 - Testing utilities
-  - Mock
-  - Nose
+  - py.test

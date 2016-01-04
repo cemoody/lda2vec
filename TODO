@@ -8,7 +8,6 @@ Add an example script with wiki word2vec data -- w2v
 Add an example script with PTB word2vec data -- w2v
 Add an example script with HN data -- LDA & w2v & ratings
 Add better README
-Add CI & coverage & license icons
 Add model saving
 Add model predicting
 
@@ -72,3 +71,4 @@ Done:
     Convert docstrings to numpy format
     Implement corpus loose to dense and vice versa
     Add fit function for all data at once
+    Add CI & coverage & license icons
