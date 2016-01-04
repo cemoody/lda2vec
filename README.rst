@@ -7,6 +7,8 @@ lda2vec: Tools for interpreting natural language
 .. image:: https://readthedocs.org/projects/lda2vec/badge/?version=latest
     :target: http://lda2vec.readthedocs.org/en/latest/?badge=latest
 
+.. image:: https://travis-ci.org/cemoody/lda2vec.svg?branch=master
+    :target: https://travis-ci.org/cemoody/lda2vec
 
 
 Requirements
