@@ -18,7 +18,7 @@ class LDA2Vec(chainer.Chain):
     _n_partial_fits = 0
 
     def __init__(self, n_words, n_hidden, counts, n_samples=20, grad_clip=5.0,
-                 gpu=None, logging_level=0, dropout_ratio=0.2):
+                 gpu=None, logging_level=0, dropout_ratio=0.5):
         """ LDA-like model with multiple contexts and supervised labels.
         In the LDA generative model words are sampled from a topic vector.
         In this model, words are drawn from a combination of contexts not
@@ -36,7 +36,7 @@ class LDA2Vec(chainer.Chain):
         counts : dict
             A dictionary with keys as word indices and values
             as counts for that word index.
-        dropout_ration : float
+        dropout_ratio : float
             Ratio of elements in the context to dropout when training
 
         >>> from lda2vec import LDA2Vec
