@@ -18,7 +18,7 @@ class LDA2Vec(chainer.Chain):
     _n_partial_fits = 0
 
     def __init__(self, n_words, n_hidden, counts, n_samples=20, grad_clip=5.0,
-                 gpu=None, logging_level=0):
+                 gpu=None, logging_level=0, dropout_ratio=0.2):
         """ LDA-like model with multiple contexts and supervised labels.
         In the LDA generative model words are sampled from a topic vector.
         In this model, words are drawn from a combination of contexts not
@@ -36,6 +36,8 @@ class LDA2Vec(chainer.Chain):
         counts : dict
             A dictionary with keys as word indices and values
             as counts for that word index.
+        dropout_ration : float
+            Ratio of elements in the context to dropout when training
 
         >>> from lda2vec import LDA2Vec
         >>> n_words = 10
@@ -61,6 +63,7 @@ class LDA2Vec(chainer.Chain):
         self.n_hidden = n_hidden
         self.n_samples = n_samples
         self.grad_clip = grad_clip
+        self.dropout_ratio = dropout_ratio
         self.components = {}
         self.component_names = []
         self.component_counts = {}
@@ -128,7 +131,8 @@ class LDA2Vec(chainer.Chain):
         """ For every context calculate and sum the embedding."""
         context = None
         for component_name, component in zip(self.component_names, components):
-            e = self[component_name + "_mixture"](component)
+            d = self[component_name + "_mixture"](component)
+            e = F.dropout(d, ratio=self.dropout_ratio)
             context = e if context is None else context + e
         return context
 

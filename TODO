@@ -12,7 +12,6 @@ Add model predicting
 Add doctets to lda2vec main classes
 
 Add loss tracking and reporting classes to code
-Add dropout
 Finish filling out docstrings
 Add multiple targets for one component
 Implement skipgram contexts
@@ -72,3 +71,4 @@ Done:
     Add CI & coverage & license icons
     Add readthedocs support
     Add examples to CI
+    Add dropout
