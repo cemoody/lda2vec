@@ -48,10 +48,10 @@ class LDA2Vec(chainer.Chain):
         >>> words = np.random.randint(n_words, size=(n_obs))
         >>> _, counts = np.unique(words, return_counts=True)
         >>> model = LDA2Vec(n_words, n_hidden, counts)
-        >>> model.add_component(n_docs, n_topics, name='document id')
+        >>> model.add_categorical_feature(n_docs, n_topics, name='document id')
         >>> model.finalize()
         >>> doc_ids = np.arange(n_obs) % n_docs
-        >>> loss = model.fit_partial(words, 1.0, components=doc_ids)
+        >>> loss = model.fit_partial(words, 1.0, categorical_features=doc_ids)
         """
         self.logger = logging.getLogger()
         self.logger.setLevel(logging_level)
@@ -64,33 +64,35 @@ class LDA2Vec(chainer.Chain):
         self.n_samples = n_samples
         self.grad_clip = grad_clip
         self.dropout_ratio = dropout_ratio
-        self.components = {}
-        self.component_names = []
-        self.component_counts = {}
+        self.categorical_features = {}
+        self.categorical_feature_names = []
+        self.categorical_feature_counts = {}
 
-    def add_component(self, n_documents, n_topics, loss_type=None,
-                      n_target_out=None, name=None):
-        """ Add a component to the context. You must add components in the
-        order in which they'll appear when `fit` is called. Optionally make
-        it a supervised component.
+    def add_categorical_feature(self, n_possible_values, n_latent_factors,
+                                loss_type=None, n_target_out=None, name=None):
+        """ Add a categorical feature to the context. You must add components
+        in the order in which they'll appear when `fit` is called. Optionally
+        make it a supervised feature.
 
         Arguments
         ---------
-        n_documents : int
-            Number of total documents.
-        n_topics : int
-            Number of topics for this component.
+        n_possible_values : int
+            The maximum index this feature attains. E.g., the total number of
+            documents.
+        n_latent_factors : int
+            Each unique feature in the category wil be decomposed into this
+            number of latent factors.
         loss_type : str
             String representing a chainer loss function. Must be in
             ['sigmoid_cross_entropy', 'softmax_cross_entropy',
                         'hinge', 'mean_squared_error']
         """
-        em = EmbedMixture(n_documents, n_topics, self.n_hidden)
+        em = EmbedMixture(n_possible_values, n_latent_factors, self.n_hidden)
         transform, loss_func = None, None
         if name is None:
-            name = "comp_%0i" % (len(self.components))
+            name = "categorical_feature_%0i" % (len(self.categorical_features))
         if loss_type is not None:
-            transform = L.Linear(n_topics, n_target_out)
+            transform = L.Linear(n_latent_factors, n_target_out)
             assert loss_type in self._loss_types
             assert loss_type in dir(chainer.functions)
             loss_func = getattr(chainer.functions, loss_type)
@@ -99,8 +101,9 @@ class LDA2Vec(chainer.Chain):
         else:
             self.logger.info("Added component %s" % name)
         self.components[name] = (em, transform, loss_func)
-        self.component_counts[name] = np.zeros(n_documents).astype('int32')
-        self.component_names.append(name)
+        counts = np.zeros(n_possible_values).astype('int32')
+        self.categorical_feature_counts[name] = counts
+        self.categorical_feature_names.append(name)
 
     def finalize(self):
         loss_func = L.NegativeSampling(self.n_hidden, self.counts,
@@ -110,7 +113,7 @@ class LDA2Vec(chainer.Chain):
         loss_func.W.data[:] = data[:].astype('float32')
         kwargs = dict(vocab=L.EmbedID(self.n_words, self.n_hidden),
                       loss_func=loss_func)
-        for name, (em, transform, lf) in self.components.items():
+        for name, (em, transform, lf) in self.categorical_features.items():
             kwargs[name + '_mixture'] = em
             if transform is not None:
                 kwargs[name + '_linear'] = transform
@@ -127,11 +130,12 @@ class LDA2Vec(chainer.Chain):
         self._optimizer = optimizer
         self.logger.info("Setup optimizer")
 
-    def _context(self, components):
+    def _context(self, data_categorical_features):
         """ For every context calculate and sum the embedding."""
         context = None
-        for component_name, component in zip(self.component_names, components):
-            d = self[component_name + "_mixture"](component)
+        for j, data in enumerate(data_categorical_features):
+            cat_feat_name = self.categorical_feature_names[j]
+            d = self[cat_feat_name + "_mixture"](data)
             e = F.dropout(d, ratio=self.dropout_ratio)
             context = e if context is None else context + e
         return context
@@ -139,8 +143,8 @@ class LDA2Vec(chainer.Chain):
     def _priors(self, contexts):
         """ Measure likelihood of seeing topic proportions"""
         loss = None
-        for component in self.component_names:
-            name = component + "_mixture"
+        for categorical_feature_name in self.categorical_feature_names:
+            name = categorical_feature_name + "_mixture"
             dl = dirichlet_likelihood(self[name].weights)
             loss = dl if loss is None else dl + loss
         return loss
@@ -155,10 +159,10 @@ class LDA2Vec(chainer.Chain):
         """ Given context + every word, predict every other word"""
         raise NotImplemented
 
-    def _target(self, data_components, data_targets):
+    def _target(self, data_cat_feats, data_targets):
         losses = None
-        args = (data_components, data_targets, self.component_names)
-        for data_component, data_target, component in zip(*args):
+        args = (data_cat_feats, data_targets, self.categorical_feature_names)
+        for data_cat_feat, data_target, cat_feat_name in zip(*args):
             # This function will input an ID and ouput
             # (batchsize, n_hidden)
             embedding = component[0]
