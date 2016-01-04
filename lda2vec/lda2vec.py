@@ -63,6 +63,7 @@ class LDA2Vec(chainer.Chain):
         self.grad_clip = grad_clip
         self.components = {}
         self.component_names = []
+        self.component_counts = {}
 
     def add_component(self, n_documents, n_topics, loss_type=None,
                       n_target_out=None, name=None):
@@ -281,6 +282,12 @@ class LDA2Vec(chainer.Chain):
         log_perp = -F.sum(log_prob) / n_words
         return log_perp
 
+    def _update_comp_counts(self, components):
+        for component in components:
+            uniques, counts = np.unique(component, return_counts=True)
+            for u, c in zip(uniques, counts):
+                self.component_counts[component][u] += c
+
     def fit_partial(self, words_flat, fraction, components=None,
                     targets=None):
         """ Train the latent document-to-topic weights, topic vectors,
@@ -308,6 +315,7 @@ class LDA2Vec(chainer.Chain):
         words_flat, components, targets = self._check_input(words_flat,
                                                             components,
                                                             targets)
+        self._update_comp_counts(components)
         context = self._context(components)
         prior_loss = self._priors(context)
         words_loss = self._unigram(context, words_flat)
@@ -325,7 +333,8 @@ class LDA2Vec(chainer.Chain):
         self.logger.info("Partial fit loss: %1.1e" % total_loss.data)
         return total_loss
 
-    def fit(self, words_flat, components=None, targets=None, epochs=10):
+    def fit(self, words_flat, fraction=0.01, components=None, targets=None,
+            epochs=10):
         """ Train the latent document-to-topic weights, topic vectors,
         and word vectors on the full dataset.
 
@@ -335,7 +344,7 @@ class LDA2Vec(chainer.Chain):
             A flattened 1D array of shape (n_observations) where each row is
             in a single document.
         fraction : float
-            Fraction of all words this subset represents. If thi
+            Break the data into chunks of this fractional size
         components : int array
             List of arrays. Each array is aligned with `words_flat`. Each
             array details the component a word is associated with, for example
@@ -345,35 +354,61 @@ class LDA2Vec(chainer.Chain):
             components are chosen so that targets will correlated with them.
             For example, this could be the sold outcome of a client comment
             or the number of votes a comment receives.
+        epochs : int
+            Number of epochs to train over the whole dataset
         """
-        fraction = 0.01
         n_chunk = int(words_flat.shape[0] * fraction)
         for epoch in range(epochs):
             args = components + targets
             for chunk, doc_id in _chunks(n_chunk, words_flat, *args):
                 self.fit_partial(chunk, fraction, components=[doc_id])
 
-    def term_topics(self, component, temperature=1.0):
+    def prepare_topics(self, component_name, index_to_word, temperature=1.0):
         """ Collects a dictionary of word, document and topic distributions.
 
+        Arguments
+        ---------
+        component_name : str or int
+            If the component was added with a name, then specify the name.
+            Otherwise the index for that component.
+        index_to_word : dict
+            Keys must be integers and values the string representation for
+            that word
+        temperature : float
+            Used to calculate the log probability of a word. See log_prob_words
+            for a description.
+
+        Returns
+        -------
+        data : dict
+            This dictionary is readily consumed by pyLDAVis for topic
+            visualization.
         """
         # Collect topic-to-word distributions, e.g. phi
-        # This is computed like p_word = softmax(context * word / temperature)
-        topic_to_word = None
+        if type(component_name) is str:
+            components = self.components[component_name]
+        else:
+            component_name = self.component_names[component_name]
+            components = self.components[component_name]
+        topic_to_word = []
+        for factor_vector in components.factors.W:
+            fv = Variable(self.xp.asarray(factor_vector))
+            factor_to_word = self._log_prob_words(fv, temperature=temperature)
+            topic_to_word.append(factor_to_word)
+            assert len(index_to_word) == factor_to_word.shape[1]
         # Collect document-to-topic distributions, e.g. theta
-        doc_to_topic = None
+        doc_to_topic = components.weights.W
         # Collect document lengths
         doc_lengths = None
         # Collect vocabulary list
-        vocab = None
+        vocab = index_to_word
         # Collect word frequency
-        term_frequency = None
+        term_frequency = self.counts
         data = {'topic_term_dists': topic_to_word,
                 'doc_topic_dists': doc_to_topic,
                 'doc_lengths': doc_lengths,
                 'vocab': vocab,
-                'term_frequency': term_frequency,
-                }
+                'term_frequency': term_frequency}
         return data
 
 
