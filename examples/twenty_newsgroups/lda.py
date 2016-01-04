@@ -36,7 +36,7 @@ clean = corpus.subsample_frequent(pruned)
 # Now flatten a 2D array of document per row and word position
 # per column to a 1D array of words
 doc_ids = np.arange(clean.shape[0])
-flattened, doc_ids = corpus.compact_to_flat(clean, [doc_ids])
+flattened, (doc_ids,) = corpus.compact_to_flat(clean, doc_ids)
 # Get the count for each key
 counts = corpus.keys_counts
 
@@ -53,6 +53,6 @@ n_topics = 10
 epochs = 5
 
 # Fit the model
-model = LDA2Vec(n_words, max_length, n_hidden, counts)
+model = LDA2Vec(n_words, n_hidden, counts)
 model.add_component(n_docs, n_topics, name='document id')
-model.fit(clean, components=[doc_ids])
+model.fit(flattened, components=[doc_ids], fraction=1e-3)

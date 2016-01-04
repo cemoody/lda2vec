@@ -29,5 +29,6 @@ script:
     - pwd
     - env | sort
     - py.test --cov=lda2vec tests/ lda2vec
+    - # python examples/twenty_newsgroups/lda.py
 after_success:
     - coveralls

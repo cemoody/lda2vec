@@ -314,7 +314,6 @@ class LDA2Vec(chainer.Chain):
             or the number of votes a comment receives.
         """
         self._n_partial_fits += 1
-        self.logger.info("Computing partial fit #%i" % self._n_partial_fits)
         self._update_comp_counts(components)
         words_flat, components, targets = self._check_input(words_flat,
                                                             components,
@@ -336,8 +335,8 @@ class LDA2Vec(chainer.Chain):
         self.logger.info("Partial fit loss: %1.1e" % total_loss.data)
         return total_loss
 
-    def fit(self, words_flat, fraction=0.01, components=None, targets=None,
-            epochs=10):
+    def fit(self, words_flat, components=None, targets=None,
+            epochs=10, fraction=0.01):
         """ Train the latent document-to-topic weights, topic vectors,
         and word vectors on the full dataset.
 
@@ -362,7 +361,11 @@ class LDA2Vec(chainer.Chain):
         """
         n_chunk = int(words_flat.shape[0] * fraction)
         for epoch in range(epochs):
-            args = components + targets
+            args = []
+            if components is not None:
+                args += components
+            if targets is not None:
+                args += targets
             for chunk, doc_id in _chunks(n_chunk, words_flat, *args):
                 self.fit_partial(chunk, fraction, components=[doc_id])
 

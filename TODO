@@ -1,4 +1,3 @@
-
 Add an example script with 20 newsgroups -- LDA
     Add visualization for topic-word
     Add examples of specific documents
@@ -12,7 +11,7 @@ Add model predicting
 
 Add doctets to lda2vec main classes
 
-Add tracking classes to code
+Add loss tracking and reporting classes to code
 Add dropout
 Finish filling out docstrings
 Add multiple targets for one component
@@ -72,3 +71,4 @@ Done:
     Add fit function for all data at once
     Add CI & coverage & license icons
     Add readthedocs support
+    Add examples to CI
