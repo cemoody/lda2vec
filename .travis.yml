@@ -16,12 +16,11 @@ before_install:
     - chmod +x miniconda.sh
     - ./miniconda.sh -b
     - export PATH=/home/travis/miniconda2/bin:$PATH
-
 install:
     - conda create --yes -n testing python=$TRAVIS_PYTHON_VERSION
     - source activate testing
     - conda install --yes numpy=$NUMPY_VERSION nose pip numba cython scikit-learn h5py
-    - pip install chainer pytest spacy
+    - pip install chainer pytest spacy codecov
     - python -m spacy.en.download --force all
     - python setup.py install
 
@@ -30,3 +29,5 @@ script:
     - pwd
     - env | sort
     - py.test tests/ lda2vec
+after_success:
+    - codecov

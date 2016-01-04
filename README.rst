@@ -26,5 +26,4 @@ Minimum requirements:
 Requirements for some features:
 
 - CUDA support
-- Testing utilities
-  - py.test
+- Testing utilities: py.test
