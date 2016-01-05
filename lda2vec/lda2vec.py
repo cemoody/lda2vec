@@ -57,6 +57,7 @@ class LDA2Vec(chainer.Chain):
         self.logger.setLevel(logging_level)
         self.logger.info("Setup LDA2Vec class")
 
+        assert len(counts) <= n_words
         self.counts = counts
         self.frequency = counts / np.sum(counts)
         self.n_words = n_words
@@ -401,25 +402,24 @@ class LDA2Vec(chainer.Chain):
             visualization.
         """
         # Collect topic-to-word distributions, e.g. phi
-        name = categorical_feature_name
-        if type(categorical_feature_name) is str:
-            categorical_features = self.categorical_features[name]
+        if isinstance(categorical_feature_name, str):
+            featname = categorical_feature_name
         else:
-            categorical_feature_name = self.categorical_feature_names[name]
-            categorical_features = self.categorical_features[name]
+            featname = self.categorical_feature_names[categorical_feature_name]
+        categorical_feature = self.categorical_features[featname]
         topic_to_word = []
-        for factor_vector in categorical_features.factors.W:
-            fv = Variable(self.xp.asarray(factor_vector))
+        for factor_vector in categorical_feature[0].factors.W.data:
+            fv = Variable(self.xp.asarray(factor_vector[None, :]))
             factor_to_word = self._log_prob_words(fv, temperature=temperature)
-            topic_to_word.append(factor_to_word)
-            assert len(vocab) == factor_to_word.shape[1]
+            topic_to_word.append(np.ravel(factor_to_word.data))
+            assert len(vocab) == factor_to_word.data.shape[1]
         # Collect document-to-topic distributions, e.g. theta
-        doc_to_topic = categorical_features.weights.W
+        doc_to_topic = categorical_feature[0].weights.W.data
         # Collect document lengths
-        doc_lengths = self.categorical_feature_counts[categorical_feature_name]
+        doc_lengths = self.categorical_feature_counts[featname]
         # Collect word frequency
         term_frequency = self.counts
-        data = {'topic_term_dists': topic_to_word,
+        data = {'topic_term_dists': np.array(topic_to_word),
                 'doc_topic_dists': doc_to_topic,
                 'doc_lengths': doc_lengths,
                 'vocab': vocab,

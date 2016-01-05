@@ -101,3 +101,42 @@ def test_log_prob_words():
     high = model.log_prob_words(comp, temperature=1e6).data
     msg = "Lower temperatures should be lower entropy and more concentrated"
     assert entropy(np.exp(low)) < entropy(np.exp(high)), msg
+
+
+def prepare_topics():
+    n_topics = 8
+    model, words, doc_ids = generate(n_hidden=n_topics)
+    vocab = ["%i" % i for i in range(words.max() + 1)]
+    n_docs = doc_ids.max() + 1
+    model.add_categorical_feature(n_docs, n_topics, name='catfeat')
+    model.finalize()
+    model.fit(words, categorical_features=[doc_ids])
+    return model, words, vocab
+
+
+def prepare_topics_checks(model, data):
+    catfeat, _, _ = model.categorical_features.values()[0]
+    cols = {'topic_term_dists': [catfeat.n_topics, model.n_words],
+            'doc_topic_dists': [catfeat.n_documents, catfeat.n_topics],
+            'doc_lengths': [catfeat.n_documents],
+            'vocab': [model.n_words],
+            'term_frequency': [model.n_words]}
+    for col, shape in cols.items():
+        msg = "Missing column '%s' in data" % col
+        assert col in data, msg
+        msg = "Shape of prepared data did not macth expected shape"
+        datum = np.array(data[col])
+        assert np.allclose(shape, datum.shape), msg
+    msg = "Document lengths should be nonzero if model has been fit"
+    assert data['doc_lengths'].sum() >= 0, msg
+
+
+def prepare_topics_numbered_named(featname='catfeat'):
+    model, words, vocab = prepare_topics()
+    data = model.prepare_topics(featname, vocab, temperature=1.0)
+    prepare_topics_checks(model, data)
+
+
+def test_prepare_topics_numbered_named():
+    for featname in [0, 'catfeat']:
+        prepare_topics_numbered_named(featname)
