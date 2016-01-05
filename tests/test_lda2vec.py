@@ -28,8 +28,9 @@ def test_compute_perplexity():
     n_wrds = words.max() + 1
     n_obs = np.prod(words.shape)
     doc_ids = np.arange(n_docs)
-    model.add_component(n_docs, n_topics)
-    log_perp = model.compute_log_perplexity(words, components=[doc_ids])
+    model.add_categorical_feature(n_docs, n_topics)
+    log_perp = model.compute_log_perplexity(words,
+                                            categorical_features=[doc_ids])
     log_prob = np.log(1.0 / n_wrds)
     theoretical = log_prob / n_obs
     msg = "Initial log perplexity is significantly different from uniform"
@@ -37,50 +38,53 @@ def test_compute_perplexity():
     assert diff < 1e-3, msg
 
 
-def component(partial=True, name=None, n_comp=1, itrs=5):
+def categorical_feature(partial=True, name=None, n_comp=1, itrs=5):
     n_topics = 2
     model, words, doc_ids = generate()
     n_docs = doc_ids.max() + 1
-    components = []
+    categorical_features = []
     for j in range(n_comp):
         if name:
             name += str(j)
-        model.add_component(n_docs, n_topics, name=name)
-        components.append(doc_ids)
-    perp_orig = model.compute_log_perplexity(words, components=components)
+        model.add_categorical_feature(n_docs, n_topics, name=name)
+        categorical_features.append(doc_ids)
+    cf = categorical_features
+    perp_orig = model.compute_log_perplexity(words, categorical_features=cf)
     # Increase learning rate
     # model._optimizer.alpha = 1e-1
     # Test perplexity decreases
     if partial:
         for _ in range(itrs):
-            model.fit_partial(words, 1.0, components=components)
+            cf = categorical_features
+            model.fit_partial(words, 1.0, categorical_features=cf)
     else:
         for _ in range(itrs):
-            model.fit(words, components=components)
-    perp_fit = model.compute_log_perplexity(words, components=components)
+            model.fit(words, categorical_features=categorical_features)
+    cf = categorical_features
+    perp_fit = model.compute_log_perplexity(words, categorical_features=cf)
     msg = "Perplexity should improve with a fit model"
     assert perp_fit.data < perp_orig.data, msg
     del model
 
 
-def test_single_component_no_name():
-    component()
-    component(partial=True)
+def test_single_categorical_feature_no_name():
+    categorical_feature()
+    categorical_feature(partial=True)
 
 
-def test_single_component_named():
-    component(name="named_layer")
-    component(name="named_layer", partial=True)
+def test_single_categorical_feature_named():
+    categorical_feature(name="named_layer")
+    categorical_feature(name="named_layer", partial=True)
 
 
-def test_multiple_components_no_names():
-    component(n_comp=3)
-    component(n_comp=3, partial=True)
+def test_multiple_categorical_features_no_names():
+    categorical_feature(n_comp=3)
+    categorical_feature(n_comp=3, partial=True)
 
 
-def test_multiple_components_named():
-    component(name="named_layer", n_comp=3)
-    component(name="named_layer", n_comp=3, partial=True)
+def test_multiple_categorical_features_named():
+    categorical_feature(name="named_layer", n_comp=3)
+    categorical_feature(name="named_layer", n_comp=3, partial=True)
 
 
 def entropy(p):
@@ -91,7 +95,7 @@ def test_log_prob_words():
     n_topics = 2
     model, words, doc_ids = generate()
     n_docs = doc_ids.max() + 1
-    model.add_component(n_docs, n_topics)
+    model.add_categorical_feature(n_docs, n_topics)
     comp = np.zeros(1).astype('int32')
     low = model.log_prob_words(comp, temperature=1e-2).data
     high = model.log_prob_words(comp, temperature=1e6).data

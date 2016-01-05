@@ -70,7 +70,7 @@ class LDA2Vec(chainer.Chain):
 
     def add_categorical_feature(self, n_possible_values, n_latent_factors,
                                 loss_type=None, n_target_out=None, name=None):
-        """ Add a categorical feature to the context. You must add components
+        """ Add a categorical feature to the context. You must add categorical_features
         in the order in which they'll appear when `fit` is called. Optionally
         make it a supervised feature.
 
@@ -85,7 +85,7 @@ class LDA2Vec(chainer.Chain):
         loss_type : str
             String representing a chainer loss function. Must be in
             ['sigmoid_cross_entropy', 'softmax_cross_entropy',
-                        'hinge', 'mean_squared_error']
+             'hinge', 'mean_squared_error']
         """
         em = EmbedMixture(n_possible_values, n_latent_factors, self.n_hidden)
         transform, loss_func = None, None
@@ -96,11 +96,11 @@ class LDA2Vec(chainer.Chain):
             assert loss_type in self._loss_types
             assert loss_type in dir(chainer.functions)
             loss_func = getattr(chainer.functions, loss_type)
-            self.logger.info("Added component %s with loss function %s" %
-                             (name, loss_type))
+            msg = "Added categorical feature %s with loss function %s"
+            self.logger.info(msg % (name, loss_type))
         else:
-            self.logger.info("Added component %s" % name)
-        self.components[name] = (em, transform, loss_func)
+            self.logger.info("Added categorical_feature %s" % name)
+        self.categorical_features[name] = (em, transform, loss_func)
         counts = np.zeros(n_possible_values).astype('int32')
         self.categorical_feature_counts[name] = counts
         self.categorical_feature_names.append(name)
@@ -163,57 +163,58 @@ class LDA2Vec(chainer.Chain):
         losses = None
         args = (data_cat_feats, data_targets, self.categorical_feature_names)
         for data_cat_feat, data_target, cat_feat_name in zip(*args):
+            cat_feat = self.categorical_features[cat_feat_name]
+            embedding, transform, loss_func = cat_feat
             # This function will input an ID and ouput
             # (batchsize, n_hidden)
-            embedding = component[0]
+            latent = embedding(data_cat_feat)
             # Transform (batchsize, n_hidden) -> (batchsize, n_dim)
             # n_dim is 1 for RMSE, 1 for logistic outcomes, n for softmax
-            transform = component[1]
-            # loss_func gives likelihood of data_target given output
-            loss_func = component[2]
-            latent = embedding(data_component)
             output = transform(latent)
+            # Loss_func gives likelihood of data_target given output
             l = loss_func(output, data_target)
             losses = l if losses is None else losses + l
         if losses is None:
             losses = 0.0
         return losses
 
-    def _check_input(self, word_matrix, components, targets):
+    def _check_input(self, word_matrix, categorical_features, targets):
         if word_matrix is not None:
             word_matrix = word_matrix.astype('int32')
         if self._finalized is False:
             self.finalize()
-        if isinstance(components, (np.ndarray, np.generic)):
-            # If we pass in a single component, wrap it into a list
-            components = [components]
+        if isinstance(categorical_features, (np.ndarray, np.generic)):
+            # If we pass in a single categorical feature, wrap it into a list
+            categorical_features = [categorical_features]
         if isinstance(targets, (np.ndarray, np.generic)):
             # If we pass in a single target, wrap it into a list
             targets = [targets]
-        if components is None:
-            components = []
+        if categorical_features is None:
+            categorical_features = []
         else:
-            msg = "Number of components not equal to initialized components"
-            assert len(components) == len(self.components), msg
-            components = [Variable(self.xp.asarray(c.astype('int32')))
-                          for c in components]
+            msg = "Number of categorical features not equal to initialized"
+            test = len(categorical_features) == len(self.categorical_features)
+            assert test, msg
+            to_var = lambda c: Variable(self.xp.asarray(c.astype('int32')))
+            categorical_features = [to_var(c) for c in categorical_features]
         if targets is None:
             targets = []
         else:
             msg = "Number of targets not equal to initialized no. of targets"
-            vals = self.components.values()
+            vals = self.categorical_features.values()
             assert len(targets) == sum([c[2] is not None for c in vals])
-        for i, component in enumerate(components):
+        for i, categorical_feature in enumerate(categorical_features):
             msg = "Number of rows in word matrix unequal"
-            msg += "to that in component array %i" % i
+            msg += "to that in categorical feature #%i" % i
             if word_matrix is not None:
-                assert word_matrix.shape[0] == component.data.shape[0], msg
+                assert word_matrix.shape[0] == \
+                    categorical_feature.data.shape[0], msg
         for i, target in enumerate(targets):
             msg = "Number of rows in word matrix unequal"
             msg += "to that in target array %i" % i
             if word_matrix is not None:
                 assert word_matrix.shape[0] == target.data.shape[0], msg
-        return word_matrix, components, targets
+        return word_matrix, categorical_features, targets
 
     def _log_prob_words(self, context, temperature=1.0):
         """ This calculates an softmax over the vocabulary as a function
@@ -223,7 +224,7 @@ class LDA2Vec(chainer.Chain):
         prob = F.softmax(dot / temperature)
         return F.log(prob)
 
-    def log_prob_words(self, component, temperature=1.0):
+    def log_prob_words(self, categorical_features, temperature=1.0):
         """ Compute the probability of each word given context vectors.
         With negative sampling a full softmax distribution is not calculated
         and so an approximation is picking words by similarity to the context.
@@ -239,8 +240,8 @@ class LDA2Vec(chainer.Chain):
 
         Arguments
         ---------
-        component : int array
-            Array of components that compute the context
+        categorical_features: int array
+            Array of categorical_features that compute the context
         temperature : float, default=1.0
             Inifinite temperature encourages all probability to spread out
             evenly, but zero temperature encourages the probability to be
@@ -250,56 +251,57 @@ class LDA2Vec(chainer.Chain):
         ---------
         http://qpleple.com/perplexity-to-evaluate-topic-models/
         """
-        _, component, _ = self._check_input(None, component, None)
+        _, categorical_features, _ = \
+            self._check_input(None, categorical_features, None)
         msg = "Temperature must be non-negative"
         assert temperature > 0.0, msg
         if self._finalized is False:
             self.finalize()
-        context = self._context(component)
+        context = self._context(categorical_features)
         log_prob = self._log_prob_words(context, temperature=temperature)
         return log_prob
 
-    def compute_log_perplexity(self, words_flat, components=None,
+    def compute_log_perplexity(self, words_flat, categorical_features=None,
                                temperature=1.0):
-        """ Compute the log perplexity given the components and a validation
+        """ Compute the log perplexity given the categorical_features and a validation
         set of words.
 
         :math:`log\_perplexity=\frac{-\Sigma_d log(p(w_d))}{N}`
 
         We ignore the negative sampling part of the objective and focus on
-        the positive component to rpedict perplexity:
+        the positive categorical_feature to rpedict perplexity:
         :math:`p(w_d)=\sigma(x^\\top w_p)`
 
         Arguments
         ---------
         words_flat : int array
             Array of ground truth (correct) words
-        components : list of int arrays
-            Each component in this array represents the context behind
-            every word
+        categorical_features : list of int arrays
+            Each categorical_feature in this array represents the context
+            behind every word
         temperature : float
             High temperature spread probability over all words, low
             temperatures concentrate it on the most common word.
         """
-        words_flat, components, _ = self._check_input(words_flat,
-                                                      components,
-                                                      None)
-        context = self._context(components)
+        words_flat, categorical_features, _ = \
+            self._check_input(words_flat, categorical_features, None)
+        context = self._context(categorical_features)
         n_words = words_flat.shape[0]
         log_prob = self._log_prob_words(context, temperature=temperature)
         # http://qpleple.com/perplexity-to-evaluate-topic-models/
         log_perp = -F.sum(log_prob) / n_words
         return log_perp
 
-    def _update_comp_counts(self, components):
-        if not isinstance(components, list):
-            components = [components, ]
-        for j, component in enumerate(components):
-            name = self.component_names[j]
-            uniques, counts = np.unique(component, return_counts=True)
-            self.component_counts[name][uniques] += counts
+    def _update_comp_counts(self, categorical_features):
+        if not isinstance(categorical_features, list):
+            categorical_features = [categorical_features, ]
+        for j, categorical_feature in enumerate(categorical_features):
+            name = self.categorical_feature_names[j]
+            uniques, counts = np.unique(categorical_feature,
+                                        return_counts=True)
+            self.categorical_feature_counts[name][uniques] += counts
 
-    def fit_partial(self, words_flat, fraction, components=None,
+    def fit_partial(self, words_flat, fraction, categorical_features=None,
                     targets=None):
         """ Train the latent document-to-topic weights, topic vectors,
         and word vectors on partial subset of the full data.
@@ -311,25 +313,24 @@ class LDA2Vec(chainer.Chain):
             in a single document.
         fraction : float
             Fraction of all words this subset represents. If thi
-        components : int array
+        categorical_features : int array
             List of arrays. Each array is aligned with `words_flat`. Each
-            array details the component a word is associated with, for example
-            a document index or a user index.
+            array details the categorical_feature a word is associated with,
+            for example a document index or a user index.
         targets : float or int arrays
             This is usually side information related to a document. Latent
-            components are chosen so that targets will correlated with them.
-            For example, this could be the sold outcome of a client comment
-            or the number of votes a comment receives.
+            categorical_features are chosen so that targets will correlated
+            with them. For example, this could be the sold outcome of a client
+            comment or the number of votes a comment receives.
         """
         self._n_partial_fits += 1
-        self._update_comp_counts(components)
-        words_flat, components, targets = self._check_input(words_flat,
-                                                            components,
-                                                            targets)
-        context = self._context(components)
+        self._update_comp_counts(categorical_features)
+        words_flat, categorical_features, targets = \
+            self._check_input(words_flat, categorical_features, targets)
+        context = self._context(categorical_features)
         prior_loss = self._priors(context)
         words_loss = self._unigram(context, words_flat)
-        trget_loss = self._target(components, targets)
+        trget_loss = self._target(categorical_features, targets)
         # Loss is composed of loss from predicting the word given context,
         # the target given the context, and the loss due to the prior
         # on the mixture embedding
@@ -343,7 +344,7 @@ class LDA2Vec(chainer.Chain):
         self.logger.info("Partial fit loss: %1.5e" % total_loss.data)
         return total_loss
 
-    def fit(self, words_flat, components=None, targets=None,
+    def fit(self, words_flat, categorical_features=None, targets=None,
             epochs=10, fraction=0.01):
         """ Train the latent document-to-topic weights, topic vectors,
         and word vectors on the full dataset.
@@ -355,36 +356,37 @@ class LDA2Vec(chainer.Chain):
             in a single document.
         fraction : float
             Break the data into chunks of this fractional size
-        components : int array
+        categorical_features : int array
             List of arrays. Each array is aligned with `words_flat`. Each
-            array details the component a word is associated with, for example
-            a document index or a user index.
+            array details the categorical_feature a word is associated with,
+            for example a document index or a user index.
         targets : float or int arrays
             This is usually side information related to a document. Latent
-            components are chosen so that targets will correlated with them.
-            For example, this could be the sold outcome of a client comment
-            or the number of votes a comment receives.
+            categorical_features are chosen so that targets will correlated
+            with them. For example, this could be the sold outcome of a
+            client comment or the number of votes a comment receives.
         epochs : int
             Number of epochs to train over the whole dataset
         """
         n_chunk = int(words_flat.shape[0] * fraction)
         for epoch in range(epochs):
             args = []
-            if components is not None:
-                args += components
+            if categorical_features is not None:
+                args += categorical_features
             if targets is not None:
                 args += targets
             for chunk, doc_id in _chunks(n_chunk, words_flat, *args):
-                self.fit_partial(chunk, fraction, components=[doc_id])
+                self.fit_partial(chunk, fraction,
+                                 categorical_features=[doc_id])
 
-    def prepare_topics(self, component_name, vocab, temperature=1.0):
+    def prepare_topics(self, categorical_feature_name, vocab, temperature=1.0):
         """ Collects a dictionary of word, document and topic distributions.
 
         Arguments
         ---------
-        component_name : str or int
-            If the component was added with a name, then specify the name.
-            Otherwise the index for that component.
+        categorical_feature_name : str or int
+            If the categorical_feature was added with a name, then specify
+            the name. Otherwise the index for that categorical_feature.
         vocab : list of str
             These must be the strings for words corresponding to
             indices [0, n_words]
@@ -399,21 +401,22 @@ class LDA2Vec(chainer.Chain):
             visualization.
         """
         # Collect topic-to-word distributions, e.g. phi
-        if type(component_name) is str:
-            components = self.components[component_name]
+        name = categorical_feature_name
+        if type(categorical_feature_name) is str:
+            categorical_features = self.categorical_features[name]
         else:
-            component_name = self.component_names[component_name]
-            components = self.components[component_name]
+            categorical_feature_name = self.categorical_feature_names[name]
+            categorical_features = self.categorical_features[name]
         topic_to_word = []
-        for factor_vector in components.factors.W:
+        for factor_vector in categorical_features.factors.W:
             fv = Variable(self.xp.asarray(factor_vector))
             factor_to_word = self._log_prob_words(fv, temperature=temperature)
             topic_to_word.append(factor_to_word)
             assert len(vocab) == factor_to_word.shape[1]
         # Collect document-to-topic distributions, e.g. theta
-        doc_to_topic = components.weights.W
+        doc_to_topic = categorical_features.weights.W
         # Collect document lengths
-        doc_lengths = self.component_counts[component_name]
+        doc_lengths = self.categorical_feature_counts[categorical_feature_name]
         # Collect word frequency
         term_frequency = self.counts
         data = {'topic_term_dists': topic_to_word,
