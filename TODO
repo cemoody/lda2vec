@@ -10,7 +10,6 @@ Add model saving
 Add model predicting
 
 Add doctets to lda2vec main classes
-
 Change component naming to 'categorical feature'
 Add linear layers between input latent and output context
 Randomize chunking order on fit

@@ -113,6 +113,7 @@ class LDA2Vec(chainer.Chain):
         loss_func.W.data[:] = data[:].astype('float32')
         kwargs = dict(vocab=L.EmbedID(self.n_words, self.n_hidden),
                       loss_func=loss_func)
+        kwargs['context_linear'] = L.Linear(self.n_hidden, self.n_hidden)
         for name, (em, transform, lf) in self.categorical_features.items():
             kwargs[name + '_mixture'] = em
             if transform is not None:
@@ -138,6 +139,8 @@ class LDA2Vec(chainer.Chain):
             d = self[cat_feat_name + "_mixture"](data)
             e = F.dropout(d, ratio=self.dropout_ratio)
             context = e if context is None else context + e
+        context = F.dropout(self['context_linear'](context),
+                            ratio=self.dropout_ratio)
         return context
 
     def _priors(self, contexts):

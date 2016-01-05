@@ -7,7 +7,7 @@ import numpy as np
 nlp = None
 
 
-def tokenize(texts, max_length, skip=-2, **kwargs):
+def tokenize(texts, max_length, skip=-2, attr=LOWER, **kwargs):
     """ Uses spaCy to quickly tokenize text and return an array
     of indices.
 
@@ -25,6 +25,9 @@ def tokenize(texts, max_length, skip=-2, **kwargs):
         shorter then this number it will be padded to this length.
     skip : int, optional
         Short documents will be padded with this variable up until max_length.
+    attr : int, from spacy.attrs
+        What to transform the token to. Choice must be in spacy.attrs, and =
+        common choices are (LOWER, LEMMA)
     kwargs : dict, optional
         Any further argument will be sent to the spaCy tokenizer. For extra
         speed consider setting tag=False, parse=False, entity=False.
@@ -53,7 +56,7 @@ def tokenize(texts, max_length, skip=-2, **kwargs):
     data[:] = skip
     for row, text in enumerate(texts):
         doc = nlp(text, **kwargs)
-        dat = doc.to_array([LOWER]).astype('int32')
+        dat = doc.to_array([attr]).astype('int32')
         length = min(len(dat), max_length)
         data[row, :length] = dat[:length, :].ravel()
         msg = "Negative indices reserved for special tokens"

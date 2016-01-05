@@ -51,14 +51,12 @@ n_words = flattened.max() + 1
 n_hidden = 128
 # Number of topics to fit
 n_topics = 20
-# Number of times to pass through the data
-epochs = 20
 
 # Fit the model
 model = LDA2Vec(n_words, n_hidden, counts)
-model.add_component(n_docs, n_topics, name='document id')
+model.add_categorical_feature(n_docs, n_topics, name='document id')
 model.finalize()
 # Move the model to the GPU makes it ~50x faster
 model.to_gpu()
-model.fit(flattened, components=[doc_ids], fraction=1e-3, epochs=epochs)
+model.fit(flattened, categorical_features=[doc_ids], fraction=1e-3, epochs=50)
 serializers.save_hdf5('model.hdf5', model)
