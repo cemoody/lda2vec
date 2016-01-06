@@ -8,6 +8,7 @@ from lda2vec import preprocess, LDA2Vec, Corpus
 from sklearn.datasets import fetch_20newsgroups
 from chainer import serializers
 import numpy as np
+import os.path
 import logging
 
 logging.basicConfig()
@@ -51,15 +52,21 @@ n_hidden = 128
 n_topics = 20
 # Get the count for each key
 counts = corpus.keys_counts[:n_words]
+# Translate the compact keys into string words
+words = [vocab[corpus.compact_to_loose.get(i, -2)] for i in range(n_words)]
 
 # Fit the model
 model = LDA2Vec(n_words, n_hidden, counts)
 model.add_categorical_feature(n_docs, n_topics, name='document id')
 model.finalize()
+if os.path.exists('model.hdf5'):
+    serializers.load_hdf5('model.hdf5', model)
 # Optional: moving the model to the GPU makes it ~50x faster
 model.to_gpu()
-model.fit(flattened, categorical_features=[doc_ids], fraction=1e-3, epochs=50)
+model.fit(flattened, categorical_features=[doc_ids], fraction=1e-3, epochs=20)
 serializers.save_hdf5('model.hdf5', model)
 
-# Visualize the model
-topics = model.prepare_topics
+# Visualize the model -- look at lda.ipynb to see the results
+model.to_cpu()
+topics = model.prepare_topics('document id', words)
+np.savez('topics.pyldavis', **topics)

@@ -9,6 +9,7 @@ Add better README
 Add model saving
 Add model predicting
 
+Add bigramming
 Change EmbedMixture naming to possible values and n latent factors
 Add doctets to lda2vec main classes
 Randomize chunking order on fit
@@ -20,6 +21,7 @@ Implement skipgram contexts
 Add temperature to perplexity measurements
 Add temperature to viz
 Add convergence criterion
+Add visualization for biclustering topics
 
 Add docs on:
     Installation
