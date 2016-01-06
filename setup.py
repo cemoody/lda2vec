@@ -3,12 +3,8 @@
 from distutils.core import setup
 
 
-install_requires = [
-    'chainer>=1.5.1',
-    'numpy>=1.10',
-    'spacy>=0.99'
-    'sklearn']
-
+with open('requirements.txt') as f:
+    install_requires = f.read().splitlines()
 
 setup(name='lda2vec',
       version='0.1',
