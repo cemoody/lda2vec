@@ -52,8 +52,8 @@ n_hidden = 128
 n_topics = 20
 # Get the count for each key
 counts = corpus.keys_counts[:n_words]
-# Translate the compact keys into string words
-words = [vocab[corpus.compact_to_loose.get(i, -2)] for i in range(n_words)]
+# Get the string representation for every compact key
+words = corpus.word_list(vocab)[:n_words]
 
 # Fit the model
 model = LDA2Vec(n_words, n_hidden, counts)
@@ -63,7 +63,7 @@ if os.path.exists('model.hdf5'):
     serializers.load_hdf5('model.hdf5', model)
 # Optional: moving the model to the GPU makes it ~50x faster
 model.to_gpu()
-model.fit(flattened, categorical_features=[doc_ids], fraction=1e-3, epochs=20)
+model.fit(flattened, categorical_features=[doc_ids], fraction=1e-3, epochs=1)
 serializers.save_hdf5('model.hdf5', model)
 
 # Visualize the model -- look at lda.ipynb to see the results

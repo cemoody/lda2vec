@@ -410,6 +410,60 @@ class Corpus():
         else:
             return word_compact[idx], components_raveled
 
+    def word_list(self, vocab, max_compact_index=None, oov_token='<OoV>'):
+        """ Translate compact keys back into string representations for a word.
+
+        Arguments
+        ---------
+        vocab : dict
+            The vocab object has loose indices as keys and word strings as
+            values.
+
+        max_compact_index : int
+            Only return words up to this index. If None, defaults to the number
+            of compact indices available
+
+        oov_token : str
+            Returns this string if a compact index does not have a word in the
+            vocab dictionary provided.
+
+        Returns
+        -------
+        word_list : list
+            A list of strings representations corresponding to word indices
+            zero to `max_compact_index`
+
+        Examples
+        --------
+
+        >>> vocab = {0: 'But', 1: 'the', 2: 'night', 3: 'was', 4: 'warm'}
+        >>> word_indices = np.zeros(50).astype('int32')
+        >>> word_indices[:25] = 0  # 'But' shows 25 times
+        >>> word_indices[25:35] = 1  # 'the' is in 10 times
+        >>> word_indices[40:46] = 2  # 'night' is in 6 times
+        >>> word_indices[46:49] = 3  # 'was' is in 3 times
+        >>> word_indices[49:] = 4  # 'warm' in in 2 times
+        >>> corpus = Corpus()
+        >>> corpus.update_word_count(word_indices)
+        >>> corpus.finalize()
+
+        Build a vocabulary of word indices
+        >>> corpus.word_list(vocab)
+        ['skip', 'out_of_vocabulary', 'But', 'the', 'night', 'was', 'warm']
+        """
+        # Translate the compact keys into string words
+        oov = self.specials['out_of_vocabulary']
+        words = []
+        if max_compact_index is None:
+            max_compact_index = self.keys_compact.shape[0]
+        index_to_special = {i: s for s, i in self.specials.items()}
+        for compact_index in range(max_compact_index):
+            loose_index = self.compact_to_loose.get(compact_index, oov)
+            special = index_to_special.get(loose_index, oov_token)
+            string = vocab.get(loose_index, special)
+            words.append(string)
+        return words
+
 
 def fast_replace(data, keys, values, skip_checks=False):
     """ Do a search-and-replace in array `data`.

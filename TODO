@@ -11,6 +11,7 @@ Add model predicting
 
 Add bigramming
 Change EmbedMixture naming to possible values and n latent factors
+Print out topics while training
 Add doctets to lda2vec main classes
 Randomize chunking order on fit
 Add loss tracking and reporting classes to code
