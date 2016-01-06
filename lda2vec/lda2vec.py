@@ -411,15 +411,21 @@ class LDA2Vec(chainer.Chain):
         for factor_vector in categorical_feature[0].factors.W.data:
             fv = Variable(self.xp.asarray(factor_vector[None, :]))
             factor_to_word = self._log_prob_words(fv, temperature=temperature)
-            topic_to_word.append(np.ravel(factor_to_word.data))
-            assert len(vocab) == factor_to_word.data.shape[1]
+            topic_to_word.append(np.ravel(np.exp(factor_to_word.data)))
+            msg = "Vocabulary size did not match expectation"
+            assert len(vocab) == factor_to_word.data.shape[1], msg
+        topic_to_word = np.array(topic_to_word)
+        msg = "Not all rows in topic_to_word sum to 1"
+        assert np.allclose(np.sum(topic_to_word, axis=1), 1), msg
         # Collect document-to-topic distributions, e.g. theta
-        doc_to_topic = categorical_feature[0].weights.W.data
+        doc_to_topic = F.softmax(categorical_feature[0].weights.W).data
+        msg = "Not all rows in doc_to_topic sum to 1"
+        assert np.allclose(np.sum(doc_to_topic, axis=1), 1), msg
         # Collect document lengths
         doc_lengths = self.categorical_feature_counts[featname]
         # Collect word frequency
         term_frequency = self.counts
-        data = {'topic_term_dists': np.array(topic_to_word),
+        data = {'topic_term_dists': topic_to_word,
                 'doc_topic_dists': doc_to_topic,
                 'doc_lengths': doc_lengths,
                 'vocab': vocab,
