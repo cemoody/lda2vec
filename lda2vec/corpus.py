@@ -268,7 +268,7 @@ class Corpus():
                Advances in Neural Information Processing Systems 26
         """
         self._check_finalized()
-        freq = self.keys_frequency
+        freq = self.keys_frequency + 1e-10
         pw = 1.0 - (np.sqrt(threshold / freq) + threshold / freq)
         prob = fast_replace(words_compact, self.keys_compact, pw)
         draw = np.random.uniform(size=prob.shape)
@@ -399,7 +399,7 @@ class Corpus():
         self._check_finalized()
         n_docs = word_compact.shape[0]
         max_length = word_compact.shape[1]
-        idx = word_compact > self.n_specials - 1
+        idx = word_compact > self.n_specials
         components_raveled = []
         msg = "Length of each component must much `word_compact` size"
         for component in components:

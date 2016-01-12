@@ -59,14 +59,17 @@ words = corpus.word_list(vocab)[:n_words]
 model = LDA2Vec(n_words, n_hidden, counts)
 model.add_categorical_feature(n_docs, n_topics, name='document id')
 model.finalize()
-if os.path.exists('model.hdf5'):
-    serializers.load_hdf5('model.hdf5', model)
+# if os.path.exists('model.hdf5'):
+#     serializers.load_hdf5('model.hdf5', model)
 # Optional: moving the model to the GPU makes it ~50x faster
 model.to_gpu()
-model.fit(flattened, categorical_features=[doc_ids], fraction=1e-3, epochs=1)
+for _ in range(20):
+    model.top_words_per_topic('document id')
+    model.fit(flattened, categorical_features=[doc_ids], fraction=1e-2, epochs=1)
 serializers.save_hdf5('model.hdf5', model)
 
 # Visualize the model -- look at lda.ipynb to see the results
 model.to_cpu()
 topics = model.prepare_topics('document id', words)
 np.savez('topics.pyldavis', **topics)
+

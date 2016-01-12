@@ -17,7 +17,7 @@ class LDA2Vec(chainer.Chain):
     _finalized = False
     _n_partial_fits = 0
 
-    def __init__(self, n_words, n_hidden, counts, n_samples=20, grad_clip=5.0,
+    def __init__(self, n_words, n_hidden, counts, n_samples=5, grad_clip=5.0,
                  gpu=None, logging_level=0, dropout_ratio=0.5):
         """ LDA-like model with multiple contexts and supervised labels.
         In the LDA generative model words are sampled from a topic vector.
@@ -141,7 +141,7 @@ class LDA2Vec(chainer.Chain):
             context = e if context is None else context + e
         return context
 
-    def _priors(self, contexts):
+    def _priors(self):
         """ Measure likelihood of seeing topic proportions"""
         loss = None
         for categorical_feature_name in self.categorical_feature_names:
@@ -156,9 +156,66 @@ class LDA2Vec(chainer.Chain):
         loss = self.loss_func(context, predict_word, **kwargs)
         return loss
 
-    def _skipgram(self, context, words):
+    def _loss(self, context, target, weight):
+        _context = F.dropout(context, ratio=self.dropout_ratio)
+        _word = F.dropout(self.vocab(target), ratio=self.dropout_ratio)
+        dot = -F.log(F.sigmoid(F.sum(_context * _word, axis=1)) + 1e-9)
+        return F.sum(dot * weight)
+
+    def _neg_sample(self, context, target, weight):
+        batchsize = target.data.shape[0]
+        loss = self._loss(context, target, weight)
+        samples = self.loss_func.sampler.sample((self.n_samples, batchsize))
+        for sample in samples:
+            sample = Variable(self.xp.asarray(sample))
+            loss += self._loss(-context, sample, weight)
+        return loss
+
+    def _skipgram_flat(self, words, cat_feats, ignore_below=3,
+                       window=5):
+        xp = self.xp
+        loss = None
+        cwords = xp.asarray(words)
+        to_var = lambda x: Variable(xp.asarray(x.astype('int32')))
+        vcat_feats = [to_var(cf[window: -(window + 1)]) for cf in cat_feats]
+        cntxt = self._context(vcat_feats)
+        pivot = Variable(cwords[window: -(window + 1)])
+        cntxt += self.vocab(pivot)
+        for offset in range(-window, window + 1):
+            weight = None
+            for cf in cat_feats:
+                w = (cf[window: -(window + 1)] ==
+                     cf[window + offset: -(window + 1) + offset])
+                weight = w if weight is None else np.logical_and(w, weight)
+            weight = Variable(xp.asarray(weight * 1.0).astype('float32'))
+            target = Variable(cwords[window + offset: -(window + 1) + offset])
+            l = self._neg_sample(cntxt, target, weight)
+            loss = l if loss is None else loss + l
+        loss.backward()
+        loss.to_cpu()
+        return loss.data + 0.0
+
+    def _skipgram(self, context, words, ignore_below=3, window=5):
         """ Given context + every word, predict every other word"""
-        raise NotImplemented
+        ignore = words < ignore_below
+        # words[ignore] = -1
+        final = np.argmax(np.all(ignore, axis=0)) - 1
+        final = np.clip(final, 0, words.shape[1] - 1)
+        vwords = [Variable(w) for w in self.xp.asarray(words.T)]
+        total_loss = None
+        for i in range(final + 1):
+            pivot = vwords[i]
+            context_word = self.vocab(pivot)
+            loss = None
+            for j in range(max(i - window, 0), min(i + window + 1, final)):
+                if i == j:
+                    continue
+                target = vwords[j]
+                l = self.loss_func(context + context_word, target)
+                loss = l if loss is None else loss + l
+            loss.backward()
+            total_loss = loss if total_loss is None else total_loss + loss
+        return total_loss
 
     def _target(self, data_cat_feats, data_targets):
         losses = None
@@ -221,7 +278,7 @@ class LDA2Vec(chainer.Chain):
         """ This calculates an softmax over the vocabulary as a function
         of the dot product of context and word.
         """
-        dot = F.matmul(context, F.transpose(self.loss_func.W))
+        dot = F.matmul(context, F.transpose(self.vocab.W))
         prob = F.softmax(dot / temperature)
         return F.log(prob)
 
@@ -326,23 +383,25 @@ class LDA2Vec(chainer.Chain):
         """
         self._n_partial_fits += 1
         self._update_comp_counts(categorical_features)
-        words_flat, categorical_features, targets = \
+        words_flat, vcategorical_features, targets = \
             self._check_input(words_flat, categorical_features, targets)
-        context = self._context(categorical_features)
-        prior_loss = self._priors(context)
-        words_loss = self._unigram(context, words_flat)
-        trget_loss = self._target(categorical_features, targets)
+        # Before calculating gradients, zero them or we will get NaN
+        self.zerograds()
+        prior_loss = self._priors()
+        # words_loss = self._unigram(context, words_flat)
+        words_loss = self._skipgram_flat(words_flat, categorical_features)
+        trget_loss = self._target(vcategorical_features, targets)
         # Loss is composed of loss from predicting the word given context,
         # the target given the context, and the loss due to the prior
         # on the mixture embedding
-        total_loss = words_loss + trget_loss + prior_loss * fraction
-        # Before calculating gradients, zero them or we will get NaN
-        self.zerograds()
+        total_loss = trget_loss + prior_loss * fraction
         # Calculate back gradients
         total_loss.backward()
         # Propagate gradients
         self._optimizer.update()
-        self.logger.info("Partial fit loss: %1.5e" % total_loss.data)
+        msg = "Partial fit loss: %1.5e Prior: %1.5e"
+        msg = msg % (words_loss, prior_loss.data)
+        self.logger.info(msg)
         return total_loss
 
     def fit(self, words_flat, categorical_features=None, targets=None,
@@ -377,7 +436,8 @@ class LDA2Vec(chainer.Chain):
             if targets is not None:
                 args += targets
             for chunk, doc_id in _chunks(n_chunk, words_flat, *args):
-                self.fit_partial(chunk, fraction,
+                this_fraction = len(chunk) * 1.0 / words_flat.shape[0]
+                self.fit_partial(chunk, this_fraction,
                                  categorical_features=[doc_id])
 
     def prepare_topics(self, categorical_feature_name, vocab, temperature=1.0):
@@ -422,7 +482,7 @@ class LDA2Vec(chainer.Chain):
         msg = "Not all rows in doc_to_topic sum to 1"
         assert np.allclose(np.sum(doc_to_topic, axis=1), 1), msg
         # Collect document lengths
-        doc_lengths = self.categorical_feature_counts[featname]
+        doc_lengths = self.categorical_feature_counts[featname].astype('int32')
         # Collect word frequency
         term_frequency = self.counts
         data = {'topic_term_dists': topic_to_word,
@@ -431,6 +491,15 @@ class LDA2Vec(chainer.Chain):
                 'vocab': vocab,
                 'term_frequency': term_frequency}
         return data
+
+    def top_words_per_topic(self, categorical_feature_name, vocab,
+                            temperature=1.0, top_n=10):
+        # Collect topic-to-word distributions, e.g. phi
+        data = self.prepare_topics(categorical_feature_name, vocab,
+                                   temperature=temperature)
+        for topic_to_word in data['topic_term_dists']:
+            top = np.argsort(topic_to_word)[::-1][:top_n]
+            print ' '.join([data['vocab'][i] for i in top])
 
 
 def _chunks(n, *args):
