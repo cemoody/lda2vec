@@ -3,6 +3,7 @@ Change prob model to just model prob of word in topic
 Add super simple explanatory models
 Hook up RTD to docstrings
 Remove spacy dep
+Add topic numbers to topic print out
 
 Add an example script with 20 newsgroups -- LDA
     Add visualization for topic-word
