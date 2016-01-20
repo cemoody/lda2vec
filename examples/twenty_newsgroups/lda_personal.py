@@ -7,14 +7,9 @@
 from lda2vec import preprocess, LDA2Vec, Corpus
 from sklearn.datasets import fetch_20newsgroups
 from chainer import serializers
-from chainer import cuda
 import numpy as np
 import os.path
 import logging
-
-# Optional: moving the model to the GPU makes it ~10x faster
-# set to False if you're having problems with Chainer and CUDA
-gpu = cuda.available
 
 logging.basicConfig()
 
@@ -39,45 +34,46 @@ compact = corpus.to_compact(tokens)
 pruned = corpus.filter_count(compact, min_count=5)
 # Words tend to have power law frequency, so selectively
 # downsample the most prevalent words
-clean = corpus.subsample_frequent(pruned)
+# clean = corpus.subsample_frequent(pruned)
 # Now flatten a 2D array of document per row and word position
 # per column to a 1D array of words. This will also remove skips
 # and OoV words
-doc_ids = np.arange(clean.shape[0])
-flattened, (doc_ids,) = corpus.compact_to_flat(clean, doc_ids)
+doc_ids = np.arange(pruned.shape[0])
+flattened, (doc_ids,) = corpus.compact_to_flat(pruned, doc_ids)
+
+print ' '.join(vocab.get(corpus.compact_to_loose.get(i, -2), '<SKIP>') for i in flattened[:100])
+
 
 # Model Parameters
 # Number of documents
 n_docs = len(texts)
 # Number of unique words in the vocabulary
-n_words = flattened.max() + 1
+n_words = pruned.max() + 1
 # Number of dimensions in a single word vector
 n_hidden = 128
 # Number of topics to fit
-n_topics = 5
+n_topics = 20
 # Get the count for each key
 counts = corpus.keys_counts[:n_words]
 # Get the string representation for every compact key
 words = corpus.word_list(vocab)[:n_words]
 
 # Fit the model
-model = LDA2Vec(n_words, n_hidden, counts)
-model.add_categorical_feature(n_docs, n_topics, name='document_id')
+model = LDA2Vec(n_words, n_hidden, counts, dropout_ratio=0.5)
+model.add_categorical_feature(n_docs, n_topics, name='document id')
 model.finalize()
-if os.path.exists('model.hdf5'):
-    serializers.load_hdf5('model.hdf5', model)
-for _ in range(20):
-    model.top_words_per_topic('document_id', words)
-    if gpu:
-        model.to_gpu()
+print "Reloading model from hdf5"
+serializers.load_hdf5('model.hdf5', model)
+# Optional: moving the model to the GPU makes it ~50x faster
+for _ in range(50):
+    model.top_words_per_topic('document id', words)
+    model.to_gpu()
     model.fit(flattened, categorical_features=[doc_ids], fraction=1e-3,
-              epochs=3)
-    if gpu:
-        model.to_cpu()
-model.top_words_per_topic('document_id', words)
+              epochs=2)
+    model.to_cpu()
+model.top_words_per_topic('document id', words)
 serializers.save_hdf5('model.hdf5', model)
 
 # Visualize the model -- look at lda.ipynb to see the results
-model.to_cpu()
 topics = model.prepare_topics('document id', words)
 np.savez('topics.pyldavis', **topics)

@@ -5,6 +5,23 @@ import chainer.links as L
 import chainer.functions as F
 
 
+def _orthogonal_matrix(shape):
+    # Stolen from blocks:
+    # github.com/mila-udem/blocks/blob/master/blocks/initialization.py
+    M1 = np.random.randn(shape[0], shape[0])
+    M2 = np.random.randn(shape[1], shape[1])
+
+    # QR decomposition of matrix with entries in N(0, 1) is random
+    Q1, R1 = np.linalg.qr(M1)
+    Q2, R2 = np.linalg.qr(M2)
+    # Correct that NumPy doesn't force diagonal of R to be non-negative
+    Q1 = Q1 * np.sign(np.diag(R1))
+    Q2 = Q2 * np.sign(np.diag(R2))
+
+    n_min = min(shape[0], shape[1])
+    return np.dot(Q1[:, :n_min], Q2[:n_min, :])
+
+
 class EmbedMixture(chainer.Chain):
 
     """ A single document is encoded as a multinomial mixture of latent topics.
@@ -42,7 +59,7 @@ class EmbedMixture(chainer.Chain):
         self.n_documents = n_documents
         self.n_topics = n_topics
         self.n_dim = n_dim
-        factors = np.random.randn(n_topics, n_dim).astype('float32')
+        factors = _orthogonal_matrix((n_topics, n_dim)).astype('float32')
         factors /= np.sqrt(n_topics + n_dim)
         super(EmbedMixture, self).__init__(
             weights=L.EmbedID(n_documents, n_topics),

@@ -239,7 +239,8 @@ class Corpus():
 
         Words will be replaced with probability as a function of their
         ferquency in the training corpus:
-        .. math :: p(w) = 1.0 - \sqrt{\frac{threshold}{f(w)}}
+        .. math :: p(w) = 1.0 - \sqrt{\frac{threshold}{f(w)}} +
+                 \frac{threshold}{f(w)}
 
         Arguments
         ---------
@@ -267,12 +268,12 @@ class Corpus():
                Advances in Neural Information Processing Systems 26
         """
         self._check_finalized()
-        freq = np.clip(self.keys_frequency, 1e-32, 1.0)
-        prob = 1.0 - np.sqrt(threshold / freq)
-        prob = np.clip(prob, 0, 1)
-        prob = fast_replace(words_compact, self.keys_compact, prob)
+        freq = self.keys_frequency + 1e-10
+        pw = 1.0 - (np.sqrt(threshold / freq) + threshold / freq)
+        prob = fast_replace(words_compact, self.keys_compact, pw)
         draw = np.random.uniform(size=prob.shape)
         ret = words_compact.copy()
+        # If probability greater than draw, skip the word
         ret[prob > draw] = self.specials_to_compact['skip']
         return ret
 
@@ -398,7 +399,7 @@ class Corpus():
         self._check_finalized()
         n_docs = word_compact.shape[0]
         max_length = word_compact.shape[1]
-        idx = word_compact > self.n_specials - 1
+        idx = word_compact > self.n_specials
         components_raveled = []
         msg = "Length of each component must much `word_compact` size"
         for component in components:
