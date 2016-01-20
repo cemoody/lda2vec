@@ -150,12 +150,6 @@ class LDA2Vec(chainer.Chain):
             loss = dl if loss is None else dl + loss
         return loss
 
-    def _unigram(self, context, words_flat, window=10, **kwargs):
-        """ Given context, predict words."""
-        predict_word = Variable(self.xp.asarray(words_flat))
-        loss = self.loss_func(context, predict_word, **kwargs)
-        return loss
-
     def _loss(self, context, target, weight):
         _context = F.dropout(context, ratio=self.dropout_ratio)
         _word = F.dropout(self.vocab(target), ratio=self.dropout_ratio)
@@ -173,6 +167,8 @@ class LDA2Vec(chainer.Chain):
 
     def _skipgram_flat(self, words, cat_feats, ignore_below=3,
                        window=5):
+        if type(cat_feats) is not list:
+            cat_feats = [cat_feats]
         xp = self.xp
         loss = None
         cwords = xp.asarray(words)
@@ -194,28 +190,6 @@ class LDA2Vec(chainer.Chain):
         loss.backward()
         loss.to_cpu()
         return loss.data + 0.0
-
-    def _skipgram(self, context, words, ignore_below=3, window=5):
-        """ Given context + every word, predict every other word"""
-        ignore = words < ignore_below
-        # words[ignore] = -1
-        final = np.argmax(np.all(ignore, axis=0)) - 1
-        final = np.clip(final, 0, words.shape[1] - 1)
-        vwords = [Variable(w) for w in self.xp.asarray(words.T)]
-        total_loss = None
-        for i in range(final + 1):
-            pivot = vwords[i]
-            context_word = self.vocab(pivot)
-            loss = None
-            for j in range(max(i - window, 0), min(i + window + 1, final)):
-                if i == j:
-                    continue
-                target = vwords[j]
-                l = self.loss_func(context + context_word, target)
-                loss = l if loss is None else loss + l
-            loss.backward()
-            total_loss = loss if total_loss is None else total_loss + loss
-        return total_loss
 
     def _target(self, data_cat_feats, data_targets):
         losses = None
@@ -388,7 +362,6 @@ class LDA2Vec(chainer.Chain):
         # Before calculating gradients, zero them or we will get NaN
         self.zerograds()
         prior_loss = self._priors()
-        # words_loss = self._unigram(context, words_flat)
         words_loss = self._skipgram_flat(words_flat, categorical_features)
         trget_loss = self._target(vcategorical_features, targets)
         # Loss is composed of loss from predicting the word given context,
