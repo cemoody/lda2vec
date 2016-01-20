@@ -10,7 +10,7 @@ import numpy as np
 # TODO: Test for visualization methods
 
 
-def generate(n_docs=300, n_words=10, n_sent_length=5, n_hidden=8):
+def generate(n_docs=300, n_words=100, n_sent_length=5, n_hidden=8):
     words = fake_data.fake_data(n_docs, n_words, n_sent_length, n_hidden)
     words_flat = words.ravel()
     doc_ids = np.repeat(np.arange(words.shape[0]).astype('int32'),
@@ -38,12 +38,12 @@ def test_compute_perplexity():
     assert diff < 1e-3, msg
 
 
-def categorical_feature(partial=True, name=None, n_comp=1, itrs=5):
+def categorical_feature(partial=True, name=None, n_cat_feat=2, itrs=5):
     n_topics = 2
     model, words, doc_ids = generate()
     n_docs = doc_ids.max() + 1
     categorical_features = []
-    for j in range(n_comp):
+    for j in range(n_cat_feat):
         if name:
             name += str(j)
         model.add_categorical_feature(n_docs, n_topics, name=name)
@@ -55,12 +55,10 @@ def categorical_feature(partial=True, name=None, n_comp=1, itrs=5):
     # Test perplexity decreases
     if partial:
         for _ in range(itrs):
-            cf = categorical_features
             model.fit_partial(words, 1.0, categorical_features=cf)
     else:
         for _ in range(itrs):
-            model.fit(words, categorical_features=categorical_features)
-    cf = categorical_features
+            model.fit(words, categorical_features=cf)
     perp_fit = model.compute_log_perplexity(words, categorical_features=cf)
     msg = "Perplexity should improve with a fit model"
     assert perp_fit.data < perp_orig.data, msg
@@ -68,27 +66,33 @@ def categorical_feature(partial=True, name=None, n_comp=1, itrs=5):
 
 
 def test_single_categorical_feature_no_name():
-    categorical_feature()
-    categorical_feature(partial=True)
+    categorical_feature(n_cat_feat=1)
+    categorical_feature(n_cat_feat=1, partial=True)
 
 
 def test_single_categorical_feature_named():
-    categorical_feature(name="named_layer")
-    categorical_feature(name="named_layer", partial=True)
+    categorical_feature(n_cat_feat=1, name="named_layer")
+    categorical_feature(n_cat_feat=1, name="named_layer", partial=True)
 
 
 def test_multiple_categorical_features_no_names():
-    categorical_feature(n_comp=3)
-    categorical_feature(n_comp=3, partial=True)
+    categorical_feature(n_cat_feat=3)
+    categorical_feature(n_cat_feat=3, partial=True)
 
 
 def test_multiple_categorical_features_named():
-    categorical_feature(name="named_layer", n_comp=3)
-    categorical_feature(name="named_layer", n_comp=3, partial=True)
+    categorical_feature(n_cat_feat=3, name="named_layer")
+    categorical_feature(n_cat_feat=3, name="named_layer", partial=True)
 
 
 def entropy(p):
-    return -np.sum(p * np.log(p))
+    p += 1e-12
+    return -np.nansum(p * np.log(p))
+
+
+def exp_entropy(log_p):
+    log_p += 1e-12
+    return -np.nansum(np.exp(log_p) * log_p)
 
 
 def test_log_prob_words():
@@ -100,7 +104,7 @@ def test_log_prob_words():
     low = model.log_prob_words(comp, temperature=1e-2).data
     high = model.log_prob_words(comp, temperature=1e6).data
     msg = "Lower temperatures should be lower entropy and more concentrated"
-    assert entropy(np.exp(low)) < entropy(np.exp(high)), msg
+    assert exp_entropy(low) < exp_entropy(high), msg
 
 
 def prepare_topics():
