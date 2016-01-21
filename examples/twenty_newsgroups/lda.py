@@ -39,12 +39,12 @@ compact = corpus.to_compact(tokens)
 pruned = corpus.filter_count(compact, min_count=5)
 # Words tend to have power law frequency, so selectively
 # downsample the most prevalent words
-clean = corpus.subsample_frequent(pruned)
+# clean = corpus.subsample_frequent(pruned)
 # Now flatten a 2D array of document per row and word position
 # per column to a 1D array of words. This will also remove skips
 # and OoV words
-doc_ids = np.arange(clean.shape[0])
-flattened, (doc_ids,) = corpus.compact_to_flat(clean, doc_ids)
+doc_ids = np.arange(pruned.shape[0])
+flattened, (doc_ids,) = corpus.compact_to_flat(pruned, doc_ids)
 
 # Model Parameters
 # Number of documents
@@ -72,10 +72,10 @@ for _ in range(20):
         model.to_gpu()
     model.fit(flattened, categorical_features=[doc_ids], fraction=1e-3,
               epochs=3)
+    serializers.save_hdf5('model.hdf5', model)
     if gpu:
         model.to_cpu()
 model.top_words_per_topic('document_id', words)
-serializers.save_hdf5('model.hdf5', model)
 
 # Visualize the model -- look at lda.ipynb to see the results
 model.to_cpu()

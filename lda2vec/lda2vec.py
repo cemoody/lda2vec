@@ -18,7 +18,7 @@ class LDA2Vec(chainer.Chain):
     _n_partial_fits = 0
 
     def __init__(self, n_words, n_hidden, counts, n_samples=5, grad_clip=5.0,
-                 gpu=None, logging_level=0, dropout_ratio=0.5):
+                 gpu=None, logging_level=0, dropout_ratio=0.5, window=5):
         """ LDA-like model with multiple contexts and supervised labels.
         In the LDA generative model words are sampled from a topic vector.
         In this model, words are drawn from a combination of contexts not
@@ -38,6 +38,8 @@ class LDA2Vec(chainer.Chain):
             as counts for that word index.
         dropout_ratio : float
             Ratio of elements in the context to dropout when training
+        window : int
+            Number of words to look behind and ahead of every context word
 
         >>> from lda2vec import LDA2Vec
         >>> n_words = 10
@@ -65,6 +67,7 @@ class LDA2Vec(chainer.Chain):
         self.n_samples = n_samples
         self.grad_clip = grad_clip
         self.dropout_ratio = dropout_ratio
+        self.window = window
         self.categorical_features = {}
         self.categorical_feature_names = []
         self.categorical_feature_counts = {}
@@ -165,10 +168,10 @@ class LDA2Vec(chainer.Chain):
             loss += self._loss(-context, sample, weight)
         return loss
 
-    def _skipgram_flat(self, words, cat_feats, ignore_below=3,
-                       window=5):
+    def _skipgram_flat(self, words, cat_feats, ignore_below=3):
         if type(cat_feats) is not list:
             cat_feats = [cat_feats]
+        window = self.window
         xp = self.xp
         loss = None
         cwords = xp.asarray(words)
@@ -249,7 +252,7 @@ class LDA2Vec(chainer.Chain):
         return word_matrix, categorical_features, targets
 
     def _log_prob_words(self, context, temperature=1.0):
-        """ This calculates an softmax over the vocabulary as a function
+        """ This calculates a softmax over the vocabulary as a function
         of the dot product of context and word.
         """
         dot = F.matmul(context, F.transpose(self.vocab.W))
@@ -367,13 +370,13 @@ class LDA2Vec(chainer.Chain):
         # Loss is composed of loss from predicting the word given context,
         # the target given the context, and the loss due to the prior
         # on the mixture embedding
-        total_loss = trget_loss + prior_loss * fraction
+        total_loss = trget_loss + prior_loss * fraction * (self.window * 2.0)
         # Calculate back gradients
         total_loss.backward()
         # Propagate gradients
         self._optimizer.update()
         msg = "Partial fit loss: %1.5e Prior: %1.5e"
-        msg = msg % (words_loss, prior_loss.data)
+        msg = msg % (words_loss, prior_loss.data * fraction)
         self.logger.info(msg)
         return total_loss
 
@@ -470,9 +473,10 @@ class LDA2Vec(chainer.Chain):
         # Collect topic-to-word distributions, e.g. phi
         data = self.prepare_topics(categorical_feature_name, vocab,
                                    temperature=temperature)
-        for topic_to_word in data['topic_term_dists']:
+        for j, topic_to_word in enumerate(data['topic_term_dists']):
             top = np.argsort(topic_to_word)[::-1][:top_n]
-            print ' '.join([data['vocab'][i] for i in top])
+            prefix = "Top words in topic %i " % j
+            print prefix + ' '.join([data['vocab'][i] for i in top])
 
 
 def _chunks(n, *args):
