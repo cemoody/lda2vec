@@ -86,13 +86,11 @@ def test_multiple_categorical_features_named():
 
 
 def entropy(p):
-    p += 1e-12
-    return -np.nansum(p * np.log(p))
+    return -np.nansum((p + 1e-12) * np.log(p + 1e-12))
 
 
 def exp_entropy(log_p):
-    log_p += 1e-12
-    return -np.nansum(np.exp(log_p) * log_p)
+    return -np.nansum(np.exp(log_p + 1e-12) * (log_p + 1e-12))
 
 
 def test_log_prob_words():

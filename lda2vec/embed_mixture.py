@@ -55,10 +55,11 @@ class EmbedMixture(chainer.Chain):
     .. seealso:: :func:`lda2vec.dirichlet_likelihood`
     """
 
-    def __init__(self, n_documents, n_topics, n_dim):
+    def __init__(self, n_documents, n_topics, n_dim, dropout_ratio=0.2):
         self.n_documents = n_documents
         self.n_topics = n_topics
         self.n_dim = n_dim
+        self.dropout_ratio = dropout_ratio
         factors = _orthogonal_matrix((n_topics, n_dim)).astype('float32')
         factors /= np.sqrt(n_topics + n_dim)
         super(EmbedMixture, self).__init__(
@@ -79,9 +80,10 @@ class EmbedMixture(chainer.Chain):
                 document.
         """
         # (batchsize, ) --> (batchsize, logweights)
-        w = self.weights(doc_ids)
+        w = F.dropout(self.weights(doc_ids), ratio=self.dropout_ratio)
         # (batchsize, logweights) --> (batchsize, multinomial)
-        multi = F.softmax(w)
+        proportions = F.softmax(w)
         # (batchsize, n_factors) * (n_factors, n_dim) --> (batchsize, n_dim)
-        w_sum = F.matmul(multi, self.factors())
+        factors = F.dropout(self.factors(), ratio=self.dropout_ratio)
+        w_sum = F.matmul(proportions, factors)
         return w_sum
