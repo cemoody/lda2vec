@@ -39,8 +39,7 @@ compact = corpus.to_compact(tokens)
 pruned = corpus.filter_count(compact, min_count=15)
 # Words tend to have power law frequency, so selectively
 # downsample the most prevalent words
-# clean = corpus.subsample_frequent(pruned)
-clean = pruned
+clean = corpus.subsample_frequent(pruned)
 # Now flatten a 2D array of document per row and word position
 # per column to a 1D array of words. This will also remove skips
 # and OoV words
@@ -55,14 +54,14 @@ n_words = flattened.max() + 1
 # Number of dimensions in a single word vector
 n_hidden = 128
 # Number of topics to fit
-n_topics = 10
+n_topics = 20
 # Get the count for each key
 counts = corpus.keys_counts[:n_words]
 # Get the string representation for every compact key
 words = corpus.word_list(vocab)[:n_words]
 
 # Fit the model
-model = LDA2Vec(n_words, n_hidden, counts, dropout_ratio=0.0)
+model = LDA2Vec(n_words, n_hidden, counts, dropout_ratio=0.2)
 model.add_categorical_feature(n_docs, n_topics, name='document_id')
 model.finalize()
 if os.path.exists('model.hdf5'):
