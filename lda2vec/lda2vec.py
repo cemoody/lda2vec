@@ -18,7 +18,7 @@ class LDA2Vec(chainer.Chain):
     _n_partial_fits = 0
 
     def __init__(self, n_words, n_hidden, counts, n_samples=5, grad_clip=5.0,
-                 gpu=None, logging_level=0, dropout_ratio=0.5, window=5):
+                 gpu=None, logging_level=0, dropout_ratio=0.2, window=5):
         """ LDA-like model with multiple contexts and supervised labels.
         In the LDA generative model words are sampled from a topic vector.
         In this model, words are drawn from a combination of contexts not
@@ -91,7 +91,8 @@ class LDA2Vec(chainer.Chain):
             ['sigmoid_cross_entropy', 'softmax_cross_entropy',
              'hinge', 'mean_squared_error']
         """
-        em = EmbedMixture(n_possible_values, n_latent_factors, self.n_hidden)
+        em = EmbedMixture(n_possible_values, n_latent_factors, self.n_hidden,
+                          dropout_ratio=self.dropout_ratio)
         transform, loss_func = None, None
         if name is None:
             name = "categorical_feature_%0i" % (len(self.categorical_features))
