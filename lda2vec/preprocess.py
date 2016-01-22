@@ -1,6 +1,6 @@
 import os
 from spacy.en import English, LOCAL_DATA_DIR
-from spacy.attrs import LOWER
+from spacy.attrs import LOWER, LIKE_URL, LIKE_EMAIL
 
 import numpy as np
 
@@ -41,11 +41,22 @@ def tokenize(texts, max_length, skip=-2, attr=LOWER, **kwargs):
         Keys are the word index, and values are the string. The pad index gets
         mapped to None
 
-    >>> arr, vocab = tokenize([u"Do you recall", u"not long ago"], 5)
+    >>> sents = [u"Do you recall", u"not long ago a@b.com", u"hello zombo.com"]
+    >>> arr, vocab = tokenize(sents, 10)
+    >>> arr.shape[0]
+    3
+    >>> arr.shape[1]
+    10
     >>> w2i = {w: i for i, w in vocab.iteritems()}
     >>> arr[0, 0] == w2i[u'do']  # First word and its index should match
     True
     >>> arr[0, -1]  # last word in 0th document is a pad word
+    -2
+    >>> arr[1, 2] == w2i[u'ago']
+    True
+    >>> arr[1, 3]  # The email token is thrown out
+    -2
+    >>> arr[2, 1]  # The URL token is thrown out
     -2
     """
     global nlp
@@ -56,11 +67,14 @@ def tokenize(texts, max_length, skip=-2, attr=LOWER, **kwargs):
     data[:] = skip
     for row, text in enumerate(texts):
         doc = nlp(text, **kwargs)
-        dat = doc.to_array([attr]).astype('int32')
-        length = min(len(dat), max_length)
-        data[row, :length] = dat[:length, :].ravel()
+        dat = doc.to_array([attr, LIKE_EMAIL, LIKE_URL]).astype('int32')
         msg = "Negative indices reserved for special tokens"
         assert dat.min() >= 0, msg
+        # Replace email and URL tokens
+        idx = (dat[:, 1] > 0) | (dat[:, 2] > 0)
+        dat[idx] = skip
+        length = min(len(dat), max_length)
+        data[row, :length] = dat[:length, 0].ravel()
     uniques = np.unique(data)
     vocab = {v: nlp.vocab[v].lower_ for v in uniques if v != skip}
     vocab[skip] = '<SKIP>'
