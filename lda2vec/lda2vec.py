@@ -191,7 +191,6 @@ class LDA2Vec(chainer.Chain):
             l = self._neg_sample(cntxt, target, weight)
             loss = l if loss is None else loss + l
         loss.backward()
-        loss.to_cpu()
         return loss.data + 0.0
 
     def _target(self, data_cat_feats, data_targets):
