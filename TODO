@@ -1,5 +1,3 @@
-Try higher importance to the prior
-Change prob model to just model prob of word in topic
 Add super simple explanatory models
 Hook up RTD to docstrings
 Remove spacy dep
@@ -95,3 +93,6 @@ Done:
     Add linear layers between input latent and output context
     Merge skipgram branch
     Add topic numbers to topic print out
+    Try higher importance to the prior
+    Change prob model to just model prob of word in topic
+    Add word dropout

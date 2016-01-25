@@ -18,7 +18,8 @@ class LDA2Vec(chainer.Chain):
     _n_partial_fits = 0
 
     def __init__(self, n_words, n_hidden, counts, n_samples=5, grad_clip=5.0,
-                 gpu=None, logging_level=0, dropout_ratio=0.2, window=5):
+                 logging_level=0, dropout_ratio=0.2, dropout_word=0.3,
+                 window=5):
         """ LDA-like model with multiple contexts and supervised labels.
         In the LDA generative model words are sampled from a topic vector.
         In this model, words are drawn from a combination of contexts not
@@ -38,6 +39,8 @@ class LDA2Vec(chainer.Chain):
             as counts for that word index.
         dropout_ratio : float
             Ratio of elements in the context to dropout when training
+        dropout_word : float
+            With given probability, remove word from training set.
         window : int
             Number of words to look behind and ahead of every context word
 
@@ -66,6 +69,7 @@ class LDA2Vec(chainer.Chain):
         self.n_hidden = n_hidden
         self.n_samples = n_samples
         self.grad_clip = grad_clip
+        self.dropout_word = dropout_word
         self.dropout_ratio = dropout_ratio
         self.window = window
         self.categorical_features = {}
@@ -187,6 +191,10 @@ class LDA2Vec(chainer.Chain):
                 w = (cf[window: -(window + 1)] ==
                      cf[window + offset: -(window + 1) + offset])
                 weight = w if weight is None else np.logical_and(w, weight)
+            if self.dropout_word:
+                wd = np.random.uniform(0, 1, weight.shape[0])
+                wd = (wd > self.dropout_word).astype('bool')
+                weight = np.logical_and(weight, wd)
             weight = Variable(xp.asarray(weight * 1.0).astype('float32'))
             target = Variable(cwords[window + offset: -(window + 1) + offset])
             l = self._neg_sample(cntxt, target, weight)
