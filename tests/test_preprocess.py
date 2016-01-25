@@ -1,7 +1,12 @@
 from lda2vec import preprocess
 import numpy as np
+import pytest
+import os
+
+on_rtd = os.environ.get('READTHEDOCS', False) == 'True'
 
 
+@pytest.mark.skipif(on_rtd)
 def test_tokenize():
     texts = [u'Do you recall, not long ago']
     texts += [u'We would walk on the sidewalk?']

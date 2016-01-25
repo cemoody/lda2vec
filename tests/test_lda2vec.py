@@ -38,8 +38,8 @@ def test_compute_perplexity():
     assert diff < 1e-3, msg
 
 
-def categorical_feature(partial=True, name=None, n_cat_feat=2, itrs=15):
-    n_topics = 2
+def categorical_feature(partial=True, name=None, n_cat_feat=2, itrs=500,
+                        n_topics=2):
     model, words, doc_ids = generate()
     n_docs = doc_ids.max() + 1
     categorical_features = []
@@ -65,15 +65,15 @@ def categorical_feature(partial=True, name=None, n_cat_feat=2, itrs=15):
     del model
 
 
-def test_single_categorical_feature_no_name():
-    categorical_feature(n_cat_feat=1)
-    categorical_feature(n_cat_feat=1, partial=True)
+def test_double_categorical_feature_no_name():
+    categorical_feature(n_cat_feat=1, n_topics=1)
+    categorical_feature(n_cat_feat=1, n_topics=1, partial=True)
 
 
-def test_single_categorical_feature_named():
-    categorical_feature(n_cat_feat=1, name="named_layer", itrs=100)
-    categorical_feature(n_cat_feat=1, name="named_layer", partial=True,
-                        itrs=100)
+def test_double_categorical_feature_named():
+    categorical_feature(n_cat_feat=1, n_topics=1, name="named_layer")
+    categorical_feature(n_cat_feat=1, n_topics=1, name="named_layer",
+                        partial=True)
 
 
 def test_multiple_categorical_features_no_names():
