@@ -34,6 +34,8 @@ class Corpus():
             Particularly useful when subsampling words or when padding a
             sentence.
 
+        Examples
+        --------
         >>> corpus = Corpus()
         >>> words_raw = np.random.randint(100, size=25)
         >>> corpus.update_word_count(words_raw)
@@ -65,6 +67,8 @@ class Corpus():
         loose_array : int array
             Array of word indices.
 
+        Examples
+        --------
         >>> corpus = Corpus()
         >>> corpus.update_word_count(np.arange(10))
         >>> corpus.update_word_count(np.arange(8))
@@ -104,19 +108,19 @@ class Corpus():
         to compact index mapping can be computed. This frees the object to
         filter, subsample, and compactify incoming word arrays.
 
+        Examples
+        --------
         >>> corpus = Corpus()
-
-        We'll update the word counts, making sure that word index 2
-        is the most common word index.
+        >>> # We'll update the word counts, making sure that word index 2
+        >>> # is the most common word index.
         >>> corpus.update_word_count(np.arange(1) + 2)
         >>> corpus.update_word_count(np.arange(3) + 2)
         >>> corpus.update_word_count(np.arange(10) + 2)
         >>> corpus.update_word_count(np.arange(8) + 2)
         >>> corpus.counts_loose[2]
         4
-
-        The corpus has not been finalized yet, and so the compact mapping
-        has not yet been computed.
+        >>> # The corpus has not been finalized yet, and so the compact mapping
+        >>> # has not yet been computed.
         >>> corpus.keys_counts[0]
         Traceback (most recent call last):
             ...
@@ -124,8 +128,7 @@ class Corpus():
         >>> corpus.finalize()
         >>> corpus.n_specials
         2
-
-        The special tokens are mapped to the first compact indices
+        >>> # The special tokens are mapped to the first compact indices
         >>> corpus.compact_to_loose[0]
         -2
         >>> corpus.compact_to_loose[0] == corpus.specials['skip']
@@ -170,7 +173,7 @@ class Corpus():
         msg += "has been called"
         assert not self._finalized, msg
 
-    def filter_count(self, words_compact, min_count=20000, max_count=0,
+    def filter_count(self, words_compact, min_count=15, max_count=0,
                      max_replacement=None, min_replacement=None):
         """ Replace word indices below min_count with the pad index.
 
@@ -190,24 +193,23 @@ class Corpus():
         max_replacement : int, default is out_of_vocabulary
             Replace words greater than max_count with this.
 
+        Examples
+        --------
         >>> corpus = Corpus()
-
-        Make 1000 word indices with index < 100 and update the word counts.
+        >>> # Make 1000 word indices with index < 100 and
+        >>> # update the word counts.
         >>> word_indices = np.random.randint(100, size=1000)
         >>> corpus.update_word_count(word_indices)
         >>> corpus.finalize()  # any word indices above 99 will be filtered
-
-        Now create a new text, but with some indices above 100
+        >>> # Now create a new text, but with some indices above 100
         >>> word_indices = np.random.randint(200, size=1000)
         >>> word_indices.max() < 100
         False
-
-        Remove words that have never appeared in the original corpus.
+        >>> # Remove words that have never appeared in the original corpus.
         >>> filtered = corpus.filter_count(word_indices, min_count=1)
         >>> filtered.max() < 100
         True
-
-        We can also remove highly frequent words.
+        >>> # We can also remove highly frequent words.
         >>> filtered = corpus.filter_count(word_indices, max_count=2)
         >>> len(np.unique(word_indices)) > len(np.unique(filtered))
         True
@@ -238,9 +240,10 @@ class Corpus():
         are replaced with the out_of_vocabulary token.
 
         Words will be replaced with probability as a function of their
-        ferquency in the training corpus:
-        .. math :: p(w) = 1.0 - \sqrt{\frac{threshold}{f(w)}} +
-                 \frac{threshold}{f(w)}
+        frequency in the training corpus:
+
+        .. math::
+            p(w) = 1.0 - \sqrt{threshold\over f(w)}
 
         Arguments
         ---------
@@ -250,6 +253,8 @@ class Corpus():
             Words with frequencies higher than this will be increasingly
             subsampled.
 
+        Examples
+        --------
         >>> corpus = Corpus()
         >>> word_indices = (np.random.power(5.0, size=1000) * 100).astype('i')
         >>> corpus.update_word_count(word_indices)
@@ -288,22 +293,23 @@ class Corpus():
         word_loose : int array
             Input loose word array to be converted into a compact array.
 
+
+        Examples
+        --------
         >>> corpus = Corpus()
         >>> word_indices = np.random.randint(100, size=1000)
         >>> n_words = len(np.unique(word_indices))
         >>> corpus.update_word_count(word_indices)
         >>> corpus.finalize()
         >>> word_compact = corpus.to_compact(word_indices)
-
-        The most common word in the training set will be mapped to be
-        right after all the special tokens, so 2 in this case.
+        >>> # The most common word in the training set will be mapped to be
+        >>> # right after all the special tokens, so 2 in this case.
         >>> np.argmax(np.bincount(word_compact)) == 2
         True
         >>> most_common = np.argmax(np.bincount(word_indices))
         >>> corpus.loose_to_compact[most_common] == 2
         True
-
-        Out of vocabulary indices will be mapped to 1
+        >>> # Out of vocabulary indices will be mapped to 1
         >>> word_indices = np.random.randint(150, size=1000)
         >>> word_compact_oov = corpus.to_compact(word_indices)
         >>> oov = corpus.specials_to_compact['out_of_vocabulary']
@@ -336,6 +342,9 @@ class Corpus():
         word_compact : int array
             Input compacted word array to be converted into a loose array.
 
+
+        Examples
+        --------
         >>> corpus = Corpus()
         >>> word_indices = np.random.randint(100, size=1000)
         >>> corpus.update_word_count(word_indices)
@@ -447,8 +456,7 @@ class Corpus():
         >>> corpus = Corpus()
         >>> corpus.update_word_count(word_indices)
         >>> corpus.finalize()
-
-        Build a vocabulary of word indices
+        >>> # Build a vocabulary of word indices
         >>> corpus.word_list(vocab)
         ['skip', 'out_of_vocabulary', 'But', 'the', 'night', 'was', 'warm']
         """
@@ -480,6 +488,8 @@ def fast_replace(data, keys, values, skip_checks=False):
     skip_checks : bool, default=False
         Optionally skip sanity checking the input.
 
+    Examples
+    --------
     >>> fast_replace(np.arange(5), np.arange(5), np.arange(5)[::-1])
     array([4, 3, 2, 1, 0])
     """

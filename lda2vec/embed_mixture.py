@@ -21,24 +21,30 @@ def _orthogonal_matrix(shape):
     n_min = min(shape[0], shape[1])
     return np.dot(Q1[:, :n_min], Q2[:n_min, :])
 
+# e=\Sigma_{j=0}^{j=n\_topics} c_j \cdot \vec{T_j}
+
 
 class EmbedMixture(chainer.Chain):
-
-    """ A single document is encoded as a multinomial mixture of latent topics.
+    r""" A single document is encoded as a multinomial mixture of latent topics.
     The mixture is defined on simplex, so that mixture weights always sum
     to 100%. The latent topic vectors resemble word vectors whose elements are
     defined over all real numbers.
 
-    For example, a single document mix may be [0.9, 0.1], indicating that
-    it is 90% in the first topic, 10% in the second. An example topic vector
-    looks like [1.5e1, -1.3e0, +3.4e0, -0.2e0], which is largely
-    uninterpretable until you measure the words most similar to this topic
-    vector.
+    For example, a single document mix may be :math:`[0.9, 0.1]`, indicating
+    that it is 90% in the first topic, 10% in the second. An example topic
+    vector looks like :math:`[1.5e1, -1.3e0, +3.4e0, -0.2e0]`, which is
+    largely uninterpretable until you measure the words most similar to this
+    topic vector.
 
-    :math:`e=\Sigma_{j=0}^{j=n\_topics} c_j \cdot \vec{T_j}`
+    A single document vector :math:`\vec{e}` is composed as weights :math:`c_j`
+    over topic vectors :math:`\vec{T_j}`:
 
-    This is usually paired with regularization on the weights `c_j`. If using
-    a Dirichlet prior with low alpha, these weights will be sparse.
+    .. math::
+
+        \vec{e}=\Sigma_{j=0}^{j=n\_topics}c_j\vec{T_j}
+
+    This is usually paired with regularization on the weights :math:`c_j`.
+    If using a Dirichlet prior with low alpha, these weights will be sparse.
 
     Args:
         n_documents (int): Total number of documents
@@ -47,10 +53,11 @@ class EmbedMixture(chainer.Chain):
             vector size)
 
     Attributes:
-        weights (~chainer.links.EmbedID): Unnormalized topic weights
-            (:math:`c_j`). To normalize these weights, use
-            `F.softmax(weights)`.
-        factors (~chainer.links.Parameter): Topic vector matrix (:math:`T_j`)
+        weights : chainer.links.EmbedID
+            Unnormalized topic weights (:math:`c_j`). To normalize these
+            weights, use `F.softmax(weights)`.
+        factors : chainer.links.Parameter
+            Topic vector matrix (:math:`T_j`)
 
     .. seealso:: :func:`lda2vec.dirichlet_likelihood`
     """
@@ -73,11 +80,12 @@ class EmbedMixture(chainer.Chain):
         onto topic vectors.
 
         Args:
-            doc_ids (~chainer.Variable): One-dimensional batch vectors of IDs
+            doc_ids : chainer.Variable
+                One-dimensional batch vectors of IDs
 
         Returns:
-            ~chainer.Variable: Batch of two-dimensional embeddings for every
-                document.
+            doc_vector : chainer.Variable
+                Batch of two-dimensional embeddings for every document.
         """
         # (batchsize, ) --> (batchsize, logweights)
         w = F.dropout(self.weights(doc_ids), ratio=self.dropout_ratio)
