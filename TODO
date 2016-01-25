@@ -1,12 +1,10 @@
-Add super simple explanatory models
 Hook up RTD to docstrings
-Remove spacy dep
-
 Add examples of specific documents to 20ng example
-Add an example script with HN data -- LDA & w2v & ratings
-Add better README
-
 Add bigramming
+Add better README
+Add an example script with HN with doc id, client id, and predicted score
+Add super simple explanatory models
+Remove spacy dep
 Change EmbedMixture naming to possible values and n latent factors
 Print out topics while training
 Add doctets to lda2vec main classes
