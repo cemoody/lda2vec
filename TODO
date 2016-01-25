@@ -1,4 +1,3 @@
-Hook up RTD to docstrings
 Add examples of specific documents to 20ng example
 Add bigramming
 Add better README
@@ -90,3 +89,4 @@ Done:
     Add temperature to viz
     Add model saving
     Add model predicting
+    Hook up RTD to docstrings

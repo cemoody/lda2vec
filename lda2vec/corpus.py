@@ -173,7 +173,7 @@ class Corpus():
         msg += "has been called"
         assert not self._finalized, msg
 
-    def filter_count(self, words_compact, min_count=20000, max_count=0,
+    def filter_count(self, words_compact, min_count=15, max_count=0,
                      max_replacement=None, min_replacement=None):
         """ Replace word indices below min_count with the pad index.
 
