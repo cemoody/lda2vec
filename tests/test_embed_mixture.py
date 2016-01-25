@@ -11,7 +11,7 @@ def softmax(v):
 def test_embed_mixture():
     """ Manually test the projection logic between topic weights and vectors"""
     # Ten documents, two topics, five hidden dimensions
-    em = EmbedMixture(10, 2, 5)
+    em = EmbedMixture(10, 2, 5, dropout_ratio=0.0)
     doc_ids = Variable(np.arange(1, dtype='int32'))
     doc_vector = em(doc_ids).data
     # weights -- (n_topics)
