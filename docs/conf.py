@@ -17,7 +17,6 @@ import os
 import shlex
 
 
-from recommonmark.parser import CommonMarkParser
 
 
 # If extensions (or modules to document with autodoc) are in another directory,
@@ -293,6 +292,4 @@ texinfo_documents = [
 #texinfo_no_detailmenu = False
 
 
-source_parsers = {'.md': CommonMarkParser}
-
-source_suffix = ['.rst', '.md']
+source_suffix = ['.rst']
