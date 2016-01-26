@@ -24,7 +24,7 @@ texts = fetch_20newsgroups(subset='train').data
 texts = [unicode(d) for d in texts]
 
 # Preprocess data
-max_length = 10000   # Limit of 1k words per document
+max_length = 10000   # Limit of 10k words per document
 tokens, vocab = preprocess.tokenize(texts, max_length, tag=False,
                                     parse=False, entity=False)
 corpus = Corpus()
@@ -45,6 +45,9 @@ clean = corpus.subsample_frequent(pruned)
 # and OoV words
 doc_ids = np.arange(pruned.shape[0])
 flattened, (doc_ids,) = corpus.compact_to_flat(pruned, doc_ids)
+# Optionally, we can initialize our word vectors from a pretrained
+# model. This helps when our corpus is small and we'd like to bootstrap
+word_vectors = corpus.compact_word_vectors(vocab)
 
 # Model Parameters
 # Number of documents
@@ -52,7 +55,8 @@ n_docs = len(texts)
 # Number of unique words in the vocabulary
 n_words = flattened.max() + 1
 # Number of dimensions in a single word vector
-n_hidden = 128
+# (if using pretrained vectors, should match that dimensionality)
+n_hidden = 300
 # Number of topics to fit
 n_topics = 20
 # Get the count for each key
@@ -64,6 +68,8 @@ words = corpus.word_list(vocab)[:n_words]
 model = LDA2Vec(n_words, n_hidden, counts, dropout_ratio=0.2)
 model.add_categorical_feature(n_docs, n_topics, name='document_id')
 model.finalize()
+# Optional: we can use the pretrained word vectors
+model.vocab.W[:, :] = word_vectors
 if os.path.exists('model.hdf5'):
     serializers.load_hdf5('model.hdf5', model)
 for _ in range(200):
