@@ -63,7 +63,7 @@ n_topics = 20
 counts = corpus.keys_counts[:n_words]
 # Get the string representation for every compact key
 words = corpus.word_list(vocab)[:n_words]
-word_vectors = words_vectors[:n_words]
+word_vectors = word_vectors[:n_words]
 
 # Fit the model
 model = LDA2Vec(n_words, n_hidden, counts, dropout_ratio=0.2)
