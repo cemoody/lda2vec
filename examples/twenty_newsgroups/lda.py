@@ -63,13 +63,14 @@ n_topics = 20
 counts = corpus.keys_counts[:n_words]
 # Get the string representation for every compact key
 words = corpus.word_list(vocab)[:n_words]
+word_vectors = words_vectors[:n_words]
 
 # Fit the model
 model = LDA2Vec(n_words, n_hidden, counts, dropout_ratio=0.2)
 model.add_categorical_feature(n_docs, n_topics, name='document_id')
 model.finalize()
 # Optional: we can use the pretrained word vectors
-model.vocab.W[:, :] = word_vectors
+model.vocab.W.data[:, :] = word_vectors[:, :]
 if os.path.exists('model.hdf5'):
     serializers.load_hdf5('model.hdf5', model)
 for _ in range(200):
