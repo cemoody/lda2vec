@@ -518,11 +518,14 @@ class Corpus():
         import spacy.en
         nlp = spacy.en.English()
         data = None
+        n_words = len(self.compact_to_loose)
         if array:
             data = array
-        n_words = len(self.compact_to_loose)
+            n_words = data.shape[0]
         for compact, loose in self.compact_to_loose.items():
             word = vocab.get(loose, None)
+            if compact >= n_words:
+                continue
             if word is None:
                 continue
             token, = nlp(unicode(word))
