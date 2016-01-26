@@ -485,7 +485,7 @@ class LDA2Vec(chainer.Chain):
         for j, topic_to_word in enumerate(data['topic_term_dists']):
             top = np.argsort(topic_to_word)[::-1][:top_n]
             prefix = "Top words in topic %i " % j
-            print prefix + ' '.join([data['vocab'][i] for i in top])
+            print prefix + ' '.join([data['vocab'][i].strip() for i in top])
 
 
 def _chunks(n, *args):
