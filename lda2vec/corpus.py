@@ -473,6 +473,68 @@ class Corpus():
             words.append(string)
         return words
 
+    def compact_word_vectors(self, vocab, array=None):
+        """ Retrieve pretrained SpaCy word spectors for our vocabulary.
+        The returned word array has row indices corresponding to the
+        compact index of a word, and columns correponding to the word
+        vector.
+
+        Arguments
+        ---------
+        vocab : dict
+            Dictionary where keys are the loose index, and values are
+            the word string.
+
+        Returns
+        -------
+        data : numpy float array
+            Array such that data[compact_index, :] = word_vector
+
+        Examples
+        --------
+        >>> import numpy.linalg as nl
+        >>> vocab = {19: 'shuttle', 5: 'astronomy', 7: 'cold', 3: 'hot'}
+        >>> word_indices = np.zeros(50).astype('int32')
+        >>> word_indices[:25] = 19  # 'Shuttle' shows 25 times
+        >>> word_indices[25:35] = 5  # 'astronomy' is in 10 times
+        >>> word_indices[40:46] = 7  # 'cold' is in 6 times
+        >>> word_indices[46:] = 3  # 'hot' is in 3 times
+        >>> corpus = Corpus()
+        >>> corpus.update_word_count(word_indices)
+        >>> corpus.finalize()
+        >>> v = corpus.compact_word_vectors(vocab)
+        >>> sim = lambda x, y: np.dot(x, y) / nl.norm(x) / nl.norm(y)
+        >>> vocab[corpus.compact_to_loose[2]]
+        'shuttle'
+        >>> vocab[corpus.compact_to_loose[3]]
+        'astronomy'
+        >>> vocab[corpus.compact_to_loose[4]]
+        'cold'
+        >>> sim_shuttle_astro = sim(v[2, :], v[3, :])
+        >>> sim_shuttle_cold = sim(v[2, :], v[4, :])
+        >>> sim_shuttle_astro > sim_shuttle_cold
+        True
+        """
+        import spacy.en
+        nlp = spacy.en.English()
+        data = None
+        if array:
+            data = array
+        n_words = len(self.compact_to_loose)
+        for compact, loose in self.compact_to_loose.items():
+            word = vocab.get(loose, None)
+            if word is None:
+                continue
+            token, = nlp(unicode(word))
+            if not token.has_vector:
+                continue
+            vector = token.vector
+            if data is None:
+                n_dim = vector.shape[0]
+                data = np.zeros((n_words, n_dim), dtype='float32')
+            data[compact, :] = vector[:]
+        return data
+
 
 def fast_replace(data, keys, values, skip_checks=False):
     """ Do a search-and-replace in array `data`.
