@@ -420,10 +420,11 @@ class LDA2Vec(chainer.Chain):
                 args += categorical_features
             if targets is not None:
                 args += targets
-            for chunk, doc_id in _chunks(n_chunk, words_flat, *args):
+            for dat in _chunks(n_chunk, words_flat, *args):
+                chunk, cat_feats = dat[0], dat[1:]
                 this_fraction = len(chunk) * 1.0 / words_flat.shape[0]
                 self.fit_partial(chunk, this_fraction,
-                                 categorical_features=[doc_id])
+                                 categorical_features=cat_feats)
 
     def prepare_topics(self, categorical_feature_name, vocab, temperature=1.0):
         """ Collects a dictionary of word, document and topic distributions.
