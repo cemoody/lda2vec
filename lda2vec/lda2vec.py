@@ -164,8 +164,8 @@ class LDA2Vec(chainer.Chain):
             name = cat_feat_name + "_mixture"
             dl = dirichlet_likelihood(self[name].weights)
             if penalty:
-                weights = self[name].weights.W
-                cc = F.cross_covariance(weights, weights)
+                factors = self[name].factors.W
+                cc = F.cross_covariance(factors, factors)
                 dl += cc
             loss = dl if loss is None else dl + loss
         return loss
