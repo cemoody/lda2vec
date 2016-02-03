@@ -1,4 +1,6 @@
 from lda2vec import fake_data
+from chainer import Variable
+from chainer.functions import cross_covariance
 import numpy as np
 
 
@@ -6,6 +8,15 @@ def test_orthogonal_matrix():
     msg = "Orthogonal matrices have equal inverse and transpose"
     arr = fake_data.orthogonal_matrix([20, 20])
     assert np.allclose(np.linalg.inv(arr), arr.T), msg
+
+
+def test_orthogonal_matrix_covariance():
+    msg = "Orthogonal matrix should have less covariance than a random matrix"
+    orth = Variable(fake_data.orthogonal_matrix([20, 20]).astype('float32'))
+    rand = Variable(np.random.randn(20, 20).astype('float32'))
+    orth_cc = cross_covariance(orth, orth).data
+    rand_cc = cross_covariance(rand, rand).data
+    assert orth_cc < rand_cc, msg
 
 
 def test_softmax():
