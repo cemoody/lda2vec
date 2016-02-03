@@ -159,12 +159,13 @@ class LDA2Vec(chainer.Chain):
     def _priors(self):
         """ Measure likelihood of seeing topic proportions"""
         loss = None
-        for cat_feat_name, vals  in self.categorical_features.items():
+        for cat_feat_name, vals in self.categorical_features.items():
             embedding, transform, loss_func, penalty = vals
             name = cat_feat_name + "_mixture"
             dl = dirichlet_likelihood(self[name].weights)
             if penalty:
-                cc = F.cross_covariance(self[name].weights, self[name].weights)
+                weights = self[name].weights.W
+                cc = F.cross_covariance(weights, weights)
                 dl += cc
             loss = dl if loss is None else dl + loss
         return loss
