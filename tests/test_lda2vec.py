@@ -39,7 +39,7 @@ def test_compute_perplexity():
 
 
 def categorical_feature(partial=True, name=None, n_cat_feat=2, itrs=500,
-                        n_topics=2):
+                        n_topics=2, penalty=None):
     model, words, doc_ids = generate()
     n_docs = doc_ids.max() + 1
     categorical_features = []
@@ -68,22 +68,28 @@ def categorical_feature(partial=True, name=None, n_cat_feat=2, itrs=500,
 def test_double_categorical_feature_no_name():
     categorical_feature(n_cat_feat=1, n_topics=1)
     categorical_feature(n_cat_feat=1, n_topics=1, partial=True)
+    categorical_feature(n_cat_feat=1, n_topics=1, partial=True, penalty=1.0)
 
 
 def test_double_categorical_feature_named():
     categorical_feature(n_cat_feat=1, n_topics=1, name="named_layer")
     categorical_feature(n_cat_feat=1, n_topics=1, name="named_layer",
                         partial=True)
+    categorical_feature(n_cat_feat=1, n_topics=1, name="named_layer",
+                        partial=True, penalty=1.0)
 
 
 def test_multiple_categorical_features_no_names():
     categorical_feature(n_cat_feat=3)
     categorical_feature(n_cat_feat=3, partial=True)
+    categorical_feature(n_cat_feat=3, partial=True, penalty=1.0)
 
 
 def test_multiple_categorical_features_named():
     categorical_feature(n_cat_feat=3, name="named_layer")
     categorical_feature(n_cat_feat=3, name="named_layer", partial=True)
+    categorical_feature(n_cat_feat=3, name="named_layer", partial=True,
+                        penalty=1.0)
 
 
 def entropy(p):
@@ -118,7 +124,7 @@ def prepare_topics():
 
 
 def prepare_topics_checks(model, data):
-    catfeat, _, _ = model.categorical_features.values()[0]
+    catfeat, _, _, _ = model.categorical_features.values()[0]
     cols = {'topic_term_dists': [catfeat.n_topics, model.n_words],
             'doc_topic_dists': [catfeat.n_documents, catfeat.n_topics],
             'doc_lengths': [catfeat.n_documents],
