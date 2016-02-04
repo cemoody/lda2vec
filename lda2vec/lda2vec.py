@@ -152,7 +152,7 @@ class LDA2Vec(chainer.Chain):
         loss_func = getattr(chainer.functions, loss_type)
         msg = "Added loss function %s"
         self.logger.info(msg % loss_type)
-        self.target_losses[name] = (transform, loss_func)
+        self.target_losses[name] = (transform, loss_func, target_dtype)
 
     def finalize(self):
         loss_func = L.NegativeSampling(self.n_hidden, self.counts,
@@ -248,11 +248,19 @@ class LDA2Vec(chainer.Chain):
         return loss.data + 0.0
 
     def _target(self, data_cat_feats, data_targets):
+        """ Calculate the local losses relating individual document topic
+        weights to the target prediction for those documents. Additionally
+        calculate a regression on all documents to global targets.
+        """
         losses = None
-        args = (data_cat_feats, data_targets, self.categorical_feature_names)
-        for data_cat_feat, data_target, cat_feat_name in zip(*args):
+        weights = []
+        args = (data_cat_feats, self.categorical_feature_names)
+        for data_cat_feat, cat_feat_name in zip(*args):
             cat_feat = self.categorical_features[cat_feat_name]
             embedding, transform, loss_func, penalty = cat_feat
+            weights.append(embedding.unnormalized_weights(data_cat_feat))
+            if loss_func is None:
+                continue
             # This function will input an ID and ouput
             # (batchsize, n_hidden)
             latent = embedding(data_cat_feat)
@@ -260,11 +268,12 @@ class LDA2Vec(chainer.Chain):
             # n_dim is 1 for RMSE, 1 for logistic outcomes, n for softmax
             output = transform(latent)
             # Loss_func gives likelihood of data_target given output
-            l = loss_func(output, data_target)
+            l = loss_func(output, data_targets[cat_feat_name])
             losses = l if losses is None else losses + l
-        features = F.concat(data_cat_feats)
-        for name, (transform, loss_func) in self.target_losses.items():
-            prediction = transform(features)
+        # Construct the latent vectors for all doc_ids
+        feature_values = F.concat(weights)
+        for name, (transform, loss_func, dtype) in self.target_losses.items():
+            prediction = transform(feature_values)
             data_target = data_targets[name]
             l = loss_func(prediction, data_target)
             losses = l if losses is None else losses + l
@@ -273,6 +282,8 @@ class LDA2Vec(chainer.Chain):
         return losses
 
     def _check_input(self, word_matrix, categorical_features, targets):
+        to_var = lambda c: Variable(self.xp.asarray(c.astype('int32')))
+        to_vard = lambda c, dt: Variable(self.xp.asarray(c.astype(dt)))
         if word_matrix is not None:
             word_matrix = word_matrix.astype('int32')
         if self._finalized is False:
@@ -280,35 +291,32 @@ class LDA2Vec(chainer.Chain):
         if isinstance(categorical_features, (np.ndarray, np.generic)):
             # If we pass in a single categorical feature, wrap it into a list
             categorical_features = [categorical_features]
-        if isinstance(targets, (np.ndarray, np.generic)):
-            # If we pass in a single target, wrap it into a list
-            targets = [targets]
+        msg = "target variable must be of format {'target_name': nd.array}"
+        assert not isinstance(targets, (np.ndarray, np.generic)), msg
         if categorical_features is None:
             categorical_features = []
         else:
             msg = "Number of categorical features not equal to initialized"
             test = len(categorical_features) == len(self.categorical_features)
             assert test, msg
-            to_var = lambda c: Variable(self.xp.asarray(c.astype('int32')))
             categorical_features = [to_var(c) for c in categorical_features]
         if targets is None:
-            targets = []
+            targets = {}
         else:
-            msg = "Number of targets not equal to initialized no. of targets"
-            vals = self.categorical_features.values()
-            assert len(targets) == sum([c[2] is not None for c in vals])
+            msg = "target %s shape not equal to other inputs"
+            new_targets = {}
+            for name, target in targets.items():
+                assert len(target) == word_matrix.shape[0], msg % name
+                _, _, dtype = self.target_losses[name]
+                vtarget = to_vard(target, dtype)
+                new_targets[name] = vtarget
         for i, categorical_feature in enumerate(categorical_features):
             msg = "Number of rows in word matrix unequal"
             msg += "to that in categorical feature #%i" % i
             if word_matrix is not None:
                 assert word_matrix.shape[0] == \
                     categorical_feature.data.shape[0], msg
-        for i, target in enumerate(targets):
-            msg = "Number of rows in word matrix unequal"
-            msg += "to that in target array %i" % i
-            if word_matrix is not None:
-                assert word_matrix.shape[0] == target.data.shape[0], msg
-        return word_matrix, categorical_features, targets
+        return word_matrix, categorical_features, new_targets
 
     def _log_prob_words(self, context, temperature=1.0):
         """ This calculates a softmax over the vocabulary as a function
