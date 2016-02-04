@@ -88,7 +88,7 @@ class EmbedMixture(chainer.Chain):
                 Batch of two-dimensional embeddings for every document.
         """
         # (batchsize, ) --> (batchsize, logweights)
-        w = F.dropout(self.weights(doc_ids), ratio=self.dropout_ratio)
+        w = self.unnormalized_weights(doc_ids)
         # (batchsize, logweights) --> (batchsize, multinomial)
         proportions = F.softmax(w)
         # (batchsize, n_factors) * (n_factors, n_dim) --> (batchsize, n_dim)
