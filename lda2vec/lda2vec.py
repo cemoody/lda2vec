@@ -79,7 +79,8 @@ class LDA2Vec(chainer.Chain):
         self.target_losses = {}
 
     def add_categorical_feature(self, n_possible_values, n_latent_factors,
-                                loss_type=None, n_target_out=None, name=None):
+                                covariance_penalty=None, loss_type=None,
+                                n_target_out=None, name=None):
         """ Add a categorical feature to the context. You must add categorical_features
         in the order in which they'll appear when `fit` is called. Optionally
         make it a supervised feature.
@@ -92,6 +93,10 @@ class LDA2Vec(chainer.Chain):
         n_latent_factors : int
             Each unique feature in the category wil be decomposed into this
             number of latent factors.
+        covariance_penalty : None, float
+            If None, do not penalize covariance among topics in this feature.
+            If float, larger covariance parameters discourage correlated topics
+            and encourage more independent topics.
         loss_type : str
             String representing a chainer loss function. Must be in
             ['sigmoid_cross_entropy', 'softmax_cross_entropy',
@@ -111,7 +116,8 @@ class LDA2Vec(chainer.Chain):
             self.logger.info(msg % (name, loss_type))
         else:
             self.logger.info("Added categorical_feature %s" % name)
-        self.categorical_features[name] = (em, transform, loss_func)
+        self.categorical_features[name] = (em, transform, loss_func,
+                                           covariance_penalty)
         counts = np.zeros(n_possible_values).astype('int32')
         self.categorical_feature_counts[name] = counts
         self.categorical_feature_names.append(name)
@@ -156,7 +162,7 @@ class LDA2Vec(chainer.Chain):
         loss_func.W.data[:] = data[:].astype('float32')
         kwargs = dict(vocab=L.EmbedID(self.n_words, self.n_hidden),
                       loss_func=loss_func)
-        for name, (em, transform, lf) in self.categorical_features.items():
+        for name, (em, transform, lf, cp) in self.categorical_features.items():
             kwargs[name + '_mixture'] = em
             if transform is not None:
                 kwargs[name + '_linear'] = transform
@@ -186,9 +192,14 @@ class LDA2Vec(chainer.Chain):
     def _priors(self):
         """ Measure likelihood of seeing topic proportions"""
         loss = None
-        for categorical_feature_name in self.categorical_feature_names:
-            name = categorical_feature_name + "_mixture"
+        for cat_feat_name, vals in self.categorical_features.items():
+            embedding, transform, loss_func, penalty = vals
+            name = cat_feat_name + "_mixture"
             dl = dirichlet_likelihood(self[name].weights)
+            if penalty:
+                factors = self[name].factors.W
+                cc = F.cross_covariance(factors, factors)
+                dl += cc
             loss = dl if loss is None else dl + loss
         return loss
 
@@ -241,7 +252,7 @@ class LDA2Vec(chainer.Chain):
         args = (data_cat_feats, data_targets, self.categorical_feature_names)
         for data_cat_feat, data_target, cat_feat_name in zip(*args):
             cat_feat = self.categorical_features[cat_feat_name]
-            embedding, transform, loss_func = cat_feat
+            embedding, transform, loss_func, penalty = cat_feat
             # This function will input an ID and ouput
             # (batchsize, n_hidden)
             latent = embedding(data_cat_feat)
