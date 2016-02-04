@@ -95,3 +95,14 @@ class EmbedMixture(chainer.Chain):
         factors = F.dropout(self.factors(), ratio=self.dropout_ratio)
         w_sum = F.matmul(proportions, factors)
         return w_sum
+
+    def unnormalized_weights(self, doc_ids):
+        """ Given an array of document indices, return a vector
+        for each document of just the unnormalized topic weights.
+
+        Returns:
+            doc_weights : chainer.Variable
+                Two dimensional topic weights of each document.
+        """
+        w = F.dropout(self.weights(doc_ids), ratio=self.dropout_ratio)
+        return w
