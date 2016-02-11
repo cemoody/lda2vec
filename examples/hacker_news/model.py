@@ -19,7 +19,6 @@ gpu = cuda.available
 
 logging.basicConfig()
 
-
 # You must run preprocess.py before this data becomes available
 # Load the data
 corpus = pickle.load(open('corpus', 'r'))
@@ -70,7 +69,8 @@ model.add_categorical_feature(n_stories, n_topic_stories, name='story_id',
 model.add_categorical_feature(n_authors, n_topic_authors, name='author_id',
                               loss_type='mean_squared_error')
 # We have topics over different parts in the evolution of Hacker News
-# but we won't have any outcome variables for it.
+# but we won't have any outcome variables for it, so don't define
+# a loss_type
 model.add_categorical_feature(n_times, n_topic_times, name='time_id')
 model.finalize()
 
@@ -80,11 +80,12 @@ if os.path.exists('model.hdf5'):
 
 # Train the model
 cat_feats = [story_id, author_id, time_id]
+targets = [score, ranking]
 for _ in range(200):
     if gpu:
         model.to_gpu()
-    model.fit(flattened, categorical_features=cat_feats, fraction=1e-3,
-              epochs=1)
+    model.fit(flattened, categorical_features=cat_feats, fraction=1e-5,
+              epochs=1, targets=targets)
     serializers.save_hdf5('model.hdf5', model)
     model.to_cpu()
     model.top_words_per_topic('story_id', words)
