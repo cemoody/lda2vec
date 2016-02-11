@@ -1,7 +1,32 @@
+# Hacker News Comments with lda2vec example
+This example trains a multi-component lda2vec model on a corpus of Hacker News
+comments. The goal is to model how Hacker News stories have changed in time, how they correlate with the number of comments posted, and what individual commenter topics are.
+
+### Running the model
+
+To run this example, first run `preprocess.py` which will download the Hacker
+News comments CSV, tokenize it, and quickly build a vocabulary. Once finished,
+it saves the training data to file.
+
+Then run `model.py` which will train the lda2vec model. 
+
+Finally, `visualize.py` helps the human interpret what the topics mean.
+
+### Preparing the HN Comment Data
+
+The corpus has been slightly filtered. We've removed comments made by 
+infrequent users (e.g. having fewer than 10 comments ever) and removed stories
+with fewer than 10 comments.
+
+The raw HN data is available on Google BigQuery, see for example these resources:
+
+- Previous analysis on this [dataset](https://github.com/fhoffa/notebooks/blob/master/analyzing%20hacker%20news.ipynb)
+
+- Dataset [shared here](https://bigquery.cloud.google.com/table/fh-bigquery:hackernews.comments)
 
 Data Prepataion
 
-Query 1
+#### Query 1
 
     SELECT p0.id AS id
          , p0.text as text
@@ -31,7 +56,7 @@ Query 1
       AND LENGTH(p0.text) > 5
     HAVING level = 0
 
-Query 2
+#### Query 2
 
     SELECT s.id AS story_id
      , s.time AS story_time
