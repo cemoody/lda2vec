@@ -1,6 +1,8 @@
 # Hacker News Comments with lda2vec example
 This example trains a multi-component lda2vec model on a corpus of Hacker News
-comments. The goal is to model how Hacker News stories have changed in time, how they correlate with the number of comments posted, and what individual commenter topics are.
+comments. The goal is to model how Hacker News stories have changed in time,
+how they correlate with the number of comments posted, and what individual
+commenter topics are.
 
 ### Running the model
 
@@ -12,11 +14,17 @@ Then run `model.py` which will train the lda2vec model.
 
 Finally, `visualize.py` helps the human interpret what the topics mean.
 
-### Preparing the HN Comment Data
+### The HN Comment Data
 
 The corpus has been slightly filtered. We've removed comments made by 
 infrequent users (e.g. having fewer than 10 comments ever) and removed stories
-with fewer than 10 comments.
+with fewer than 10 comments. The training corpus is available at 
+[Zenodo](https://zenodo.org/record/45901#.Vrv5jJMrLMU).
+
+### Preparing the HN Comment Data
+
+You shouldn't need to repeat any of the Google BigQuery work. If you would like
+to nevertheless, the rough steps are outline below:
 
 The raw HN data is available on Google BigQuery, see for example these resources:
 

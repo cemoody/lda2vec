@@ -79,6 +79,7 @@ flattened, features_flat = corpus.compact_to_flat(pruned, *feature_arrs)
 
 # Save the data
 pickle.dump(corpus, open('corpus', 'w'))
+pickle.dump(vocab, open('vocab', 'w'))
 features.to_pickle('features.pd')
 data = dict(flattened=flattened, story_id=story_id_f, author_id=author_id_f,
             time_id=time_id_f, ranking=ranking_f, score=score_f)
