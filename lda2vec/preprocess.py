@@ -7,7 +7,7 @@ import numpy as np
 nlp = None
 
 
-def tokenize(texts, max_length, skip=-2, attr=LOWER, **kwargs):
+def tokenize(texts, max_length, skip=-2, attr=LOWER, merge=False, **kwargs):
     """ Uses spaCy to quickly tokenize text and return an array
     of indices.
 
@@ -28,6 +28,9 @@ def tokenize(texts, max_length, skip=-2, attr=LOWER, **kwargs):
     attr : int, from spacy.attrs
         What to transform the token to. Choice must be in spacy.attrs, and =
         common choices are (LOWER, LEMMA)
+    merge : int, optional
+        Merge noun phrases into a single token. Useful for turning 'New York'
+        into a single token.
     kwargs : dict, optional
         Any further argument will be sent to the spaCy tokenizer. For extra
         speed consider setting tag=False, parse=False, entity=False.
@@ -65,8 +68,24 @@ def tokenize(texts, max_length, skip=-2, attr=LOWER, **kwargs):
         nlp = English(data_dir=data_dir)
     data = np.zeros((len(texts), max_length), dtype='int32')
     data[:] = skip
-    for row, text in enumerate(texts):
-        doc = nlp(text, **kwargs)
+    bad_deps = ('amod', 'compound')
+    for row, doc in enumerate(nlp.pipe(texts, n_threads=4)):
+        if merge:
+            # from the spaCy blog, an example on how to merge
+            # noun phrases into single tokens
+            for phrase in doc.noun_chunks:
+                # Only keep adjectives and nouns, e.g. "good ideas"
+                while len(phrase) > 1 and phrase[0].dep_ not in bad_deps:
+                    phrase = phrase[1:]
+                if len(phrase) > 1:
+                    # Merge the tokens, e.g. good_ideas
+                    phrase.merge(phrase.root.tag_, phrase.text,
+                                 phrase.root.ent_type_)
+                # Iterate over named entities
+                for ent in doc.ents:
+                    if len(ent) > 1:
+                        # Merge them into single tokens
+                        ent.merge(ent.root.tag_, ent.text, ent.label_)
         dat = doc.to_array([attr, LIKE_EMAIL, LIKE_URL]).astype('int32')
         msg = "Negative indices reserved for special tokens"
         assert dat.min() >= 0, msg
