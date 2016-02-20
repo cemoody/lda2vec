@@ -21,8 +21,6 @@ def _orthogonal_matrix(shape):
     n_min = min(shape[0], shape[1])
     return np.dot(Q1[:, :n_min], Q2[:n_min, :])
 
-# e=\Sigma_{j=0}^{j=n\_topics} c_j \cdot \vec{T_j}
-
 
 class EmbedMixture(chainer.Chain):
     r""" A single document is encoded as a multinomial mixture of latent topics.
@@ -87,16 +85,14 @@ class EmbedMixture(chainer.Chain):
             doc_vector : chainer.Variable
                 Batch of two-dimensional embeddings for every document.
         """
-        # (batchsize, ) --> (batchsize, logweights)
-        w = self.unnormalized_weights(doc_ids)
-        # (batchsize, logweights) --> (batchsize, multinomial)
-        proportions = F.softmax(w)
+        # (batchsize, ) --> (batchsize, multinomial)
+        proportions = self.weights(doc_ids, softmax=True)
         # (batchsize, n_factors) * (n_factors, n_dim) --> (batchsize, n_dim)
         factors = F.dropout(self.factors(), ratio=self.dropout_ratio)
         w_sum = F.matmul(proportions, factors)
         return w_sum
 
-    def unnormalized_weights(self, doc_ids):
+    def weights(self, doc_ids, softmax=False):
         """ Given an array of document indices, return a vector
         for each document of just the unnormalized topic weights.
 
@@ -105,4 +101,7 @@ class EmbedMixture(chainer.Chain):
                 Two dimensional topic weights of each document.
         """
         w = F.dropout(self.weights(doc_ids), ratio=self.dropout_ratio)
-        return w
+        if softmax:
+            return F.softmax(w)
+        else:
+            return w

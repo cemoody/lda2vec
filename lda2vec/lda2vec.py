@@ -268,7 +268,7 @@ class LDA2Vec(chainer.Chain):
                 continue
             # This function will input an ID and ouput
             # (batchsize, n_hidden)
-            latent = embedding(data_cat_feat)
+            latent = embedding.weights(data_cat_feat, softmax=True)
             # Transform (batchsize, n_hidden) -> (batchsize, n_dim)
             # n_dim is 1 for RMSE, 1 for logistic outcomes, n for softmax
             output = transform(latent)
