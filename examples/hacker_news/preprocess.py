@@ -83,5 +83,5 @@ pickle.dump(vocab, open('vocab', 'w'))
 features.to_pickle('features.pd')
 data = dict(flattened=flattened, story_id=story_id_f, author_id=author_id_f,
             time_id=time_id_f, ranking=ranking_f, score=score_f)
-np.savez('data', data)
+np.savez('data', **data)
 np.save(open('tokens', 'w'), tokens)

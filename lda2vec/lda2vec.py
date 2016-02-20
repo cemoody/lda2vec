@@ -79,7 +79,7 @@ class LDA2Vec(chainer.Chain):
 
     def add_categorical_feature(self, n_possible_values, n_latent_factors,
                                 covariance_penalty=None, loss_type=None,
-                                n_target_out=None, name=None):
+                                n_target_out=1, name=None):
         """ Add a categorical feature to the context. You must add categorical_features
         in the order in which they'll appear when `fit` is called. Optionally
         make it a supervised feature.
@@ -100,6 +100,9 @@ class LDA2Vec(chainer.Chain):
             String representing a chainer loss function. Must be in
             ['sigmoid_cross_entropy', 'softmax_cross_entropy',
              'hinge', 'mean_squared_error']
+        n_target_out : int
+            Dimensionality of the target. If predicting a scalar output, this
+            should be 1. Otherwise should be the rank of the output.
         """
         em = EmbedMixture(n_possible_values, n_latent_factors, self.n_hidden,
                           dropout_ratio=self.dropout_ratio)
@@ -192,8 +195,8 @@ class LDA2Vec(chainer.Chain):
         xp = self.xp
         loss = None
         cwords = xp.asarray(words)
-        to_var = lambda x: Variable(xp.asarray(x.astype('int32')))
-        vcat_feats = [to_var(cf[window: -(window + 1)]) for cf in cat_feats]
+        vcat_feats = [self.to_var(cf[window: -(window + 1)])
+                      for cf in cat_feats]
         cntxt = self._context(vcat_feats)
         pivot = Variable(cwords[window: -(window + 1)])
         cntxt += self.vocab(pivot)
@@ -233,6 +236,9 @@ class LDA2Vec(chainer.Chain):
             losses = 0.0
         return losses
 
+    def to_var(self, c):
+        return Variable(self.xp.asarray(c.astype('int32')))
+
     def _check_input(self, word_matrix, categorical_features, targets):
         if word_matrix is not None:
             word_matrix = word_matrix.astype('int32')
@@ -250,14 +256,15 @@ class LDA2Vec(chainer.Chain):
             msg = "Number of categorical features not equal to initialized"
             test = len(categorical_features) == len(self.categorical_features)
             assert test, msg
-            to_var = lambda c: Variable(self.xp.asarray(c.astype('int32')))
-            categorical_features = [to_var(c) for c in categorical_features]
+            categorical_features = [self.to_var(c)
+                                    for c in categorical_features]
         if targets is None:
             targets = []
         else:
             msg = "Number of targets not equal to initialized no. of targets"
             vals = self.categorical_features.values()
             assert len(targets) == sum([c[2] is not None for c in vals])
+            targets = [self.to_var(c) for c in targets]
         for i, categorical_feature in enumerate(categorical_features):
             msg = "Number of rows in word matrix unequal"
             msg += "to that in categorical feature #%i" % i
@@ -379,9 +386,9 @@ class LDA2Vec(chainer.Chain):
             comment or the number of votes a comment receives.
         """
         self._n_partial_fits += 1
-        self._update_comp_counts(categorical_features)
         words_flat, vcategorical_features, targets = \
             self._check_input(words_flat, categorical_features, targets)
+        self._update_comp_counts(categorical_features)
         # Before calculating gradients, zero them or we will get NaN
         self.zerograds()
         prior_loss = self._priors()
@@ -429,13 +436,15 @@ class LDA2Vec(chainer.Chain):
             args = []
             if categorical_features is not None:
                 args += categorical_features
+            n_cat_feats = len(args)
             if targets is not None:
                 args += targets
             for dat in _chunks(n_chunk, words_flat, *args):
-                chunk, cat_feats = dat[0], dat[1:]
+                chunk = dat.pop(0)
+                cat_feat, target = dat[:n_cat_feats], dat[n_cat_feats:]
                 this_fraction = len(chunk) * 1.0 / words_flat.shape[0]
                 self.fit_partial(chunk, this_fraction,
-                                 categorical_features=cat_feats)
+                                 categorical_features=cat_feat, targets=target)
 
     def prepare_topics(self, categorical_feature_name, vocab, temperature=1.0):
         """ Collects a dictionary of word, document and topic distributions.
