@@ -1,4 +1,7 @@
+Add tests for target
+Add tests for global targets
 Add examples of specific documents to 20ng example
+Add better naming to categorical variables, e.g. like target variables
 Keep track of doc counts between model serializations
 Add bigramming
 Add better README

@@ -16,6 +16,8 @@ def test_embed_mixture():
     doc_vector = em(doc_ids).data
     # weights -- (n_topics)
     weights = softmax(em.weights.W.data[0, :])
+    un_weights = softmax(em.unnormalized_weights(doc_ids).data[0, :])
     # (n_hidden) = (n_topics) . (n_topics, n_hidden)
     test = np.sum(weights * em.factors.W.data.T, axis=1)
     assert np.allclose(doc_vector, test)
+    assert np.allclose(un_weights, weights)

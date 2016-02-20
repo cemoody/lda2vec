@@ -76,6 +76,7 @@ class LDA2Vec(chainer.Chain):
         self.categorical_features = {}
         self.categorical_feature_names = []
         self.categorical_feature_counts = {}
+        self.target_losses = {}
 
     def add_categorical_feature(self, n_possible_values, n_latent_factors,
                                 covariance_penalty=None, loss_type=None,
@@ -125,6 +126,38 @@ class LDA2Vec(chainer.Chain):
         counts = np.zeros(n_possible_values).astype('int32')
         self.categorical_feature_counts[name] = counts
         self.categorical_feature_names.append(name)
+
+    def add_target(self, name, target_dtype, out_size, loss_type):
+        """ Add a target variable predicted using all categorical features.
+        As compared to `add_categorical_features`, this feature will correlate
+        all topics with the outcome instead of a single feature with a single
+        outcome.
+
+        Arguments
+        ---------
+        name : str
+            Name of the target variable to predict. When target data
+            passed to the `fit` method must match this name.
+        target_dtype : 'int32' or 'float32'
+            You must state if you are predicting a categorical, numerical
+        out_size : int
+            If the outcome is a scalar this should be 1, if the outcome is
+            categorical this should be the number of categories, if the
+            outcome is a vector, this should be the dimensionality of that
+            vector.
+        loss_type : str name of a function in chainer.loss_functions
+            Must be a loss function recognized in Chainer.
+        """
+        msg = "target_dtype must be int32 or float32"
+        assert target_dtype in ('int32', 'float32'), msg
+        n_features = sum(cf[0].in_size for cf in self.categorical_features)
+        transform = L.Linear(n_features, out_size)
+        assert loss_type in self._loss_types
+        assert loss_type in dir(chainer.functions)
+        loss_func = getattr(chainer.functions, loss_type)
+        msg = "Added loss function %s"
+        self.logger.info(msg % loss_type)
+        self.target_losses[name] = (transform, loss_func, target_dtype)
 
     def finalize(self):
         loss_func = L.NegativeSampling(self.n_hidden, self.counts,
@@ -220,11 +253,19 @@ class LDA2Vec(chainer.Chain):
         return loss.data + 0.0
 
     def _target(self, data_cat_feats, data_targets):
+        """ Calculate the local losses relating individual document topic
+        weights to the target prediction for those documents. Additionally
+        calculate a regression on all documents to global targets.
+        """
         losses = None
-        args = (data_cat_feats, data_targets, self.categorical_feature_names)
-        for data_cat_feat, data_target, cat_feat_name in zip(*args):
+        weights = []
+        args = (data_cat_feats, self.categorical_feature_names)
+        for data_cat_feat, cat_feat_name in zip(*args):
             cat_feat = self.categorical_features[cat_feat_name]
             embedding, transform, loss_func, penalty = cat_feat
+            weights.append(embedding.unnormalized_weights(data_cat_feat))
+            if loss_func is None:
+                continue
             # This function will input an ID and ouput
             # (batchsize, n_hidden)
             latent = embedding(data_cat_feat)
@@ -232,7 +273,14 @@ class LDA2Vec(chainer.Chain):
             # n_dim is 1 for RMSE, 1 for logistic outcomes, n for softmax
             output = transform(latent)
             # Loss_func gives likelihood of data_target given output
-            l = loss_func(output, data_target)
+            l = loss_func(output, data_targets[cat_feat_name])
+            losses = l if losses is None else losses + l
+        # Construct the latent vectors for all doc_ids
+        feature_values = F.concat(weights)
+        for name, (transform, loss_func, dtype) in self.target_losses.items():
+            prediction = transform(feature_values)
+            data_target = data_targets[name]
+            l = loss_func(prediction, data_target)
             losses = l if losses is None else losses + l
         if losses is None:
             losses = 0.0
@@ -249,9 +297,8 @@ class LDA2Vec(chainer.Chain):
         if isinstance(categorical_features, (np.ndarray, np.generic)):
             # If we pass in a single categorical feature, wrap it into a list
             categorical_features = [categorical_features]
-        if isinstance(targets, (np.ndarray, np.generic)):
-            # If we pass in a single target, wrap it into a list
-            targets = [targets]
+        msg = "target variable must be of format {'target_name': nd.array}"
+        assert not isinstance(targets, (np.ndarray, np.generic)), msg
         if categorical_features is None:
             categorical_features = []
         else:
@@ -273,11 +320,6 @@ class LDA2Vec(chainer.Chain):
             if word_matrix is not None:
                 assert word_matrix.shape[0] == \
                     categorical_feature.data.shape[0], msg
-        for i, target in enumerate(targets):
-            msg = "Number of rows in word matrix unequal"
-            msg += "to that in target array %i" % i
-            if word_matrix is not None:
-                assert word_matrix.shape[0] == target.data.shape[0], msg
         return word_matrix, categorical_features, targets
 
     def _log_prob_words(self, context, temperature=1.0):
@@ -381,11 +423,13 @@ class LDA2Vec(chainer.Chain):
             List of arrays. Each array is aligned with `words_flat`. Each
             array details the categorical_feature a word is associated with,
             for example a document index or a user index.
-        targets : float or int arrays
+        targets : dict of float or int arrays
             This is usually side information related to a document. Latent
             categorical_features are chosen so that targets will correlated
             with them. For example, this could be the sold outcome of a client
-            comment or the number of votes a comment receives.
+            comment or the number of votes a comment receives. The key of this
+            dictionary must be a string matching the name given to the target
+            loss function. The values must the outcome numpy arrays.
         """
         self._n_partial_fits += 1
         words_flat, vcategorical_features, targets = \
