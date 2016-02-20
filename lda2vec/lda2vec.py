@@ -110,9 +110,11 @@ class LDA2Vec(chainer.Chain):
         if name is None:
             name = "categorical_feature_%0i" % (len(self.categorical_features))
         if loss_type is not None:
-            transform = L.Linear(n_latent_factors, n_target_out)
             assert loss_type in self._loss_types
             assert loss_type in dir(chainer.functions)
+            assert n_target_out is not None
+            assert n_latent_factors is not None
+            transform = L.Linear(n_latent_factors, n_target_out)
             loss_func = getattr(chainer.functions, loss_type)
             msg = "Added categorical feature %s with loss function %s"
             self.logger.info(msg % (name, loss_type))

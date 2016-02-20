@@ -61,13 +61,13 @@ model = LDA2Vec(n_words, n_hidden, counts, dropout_ratio=0.2)
 # to correlate with the article 'score'. This gives us a better idea
 # of what topics get to the top of HN
 model.add_categorical_feature(n_stories, n_topic_stories, name='story_id',
-                              loss_type='mean_squared_error')
+                              loss_type='mean_squared_error', n_target_out=1)
 # This gives us topics over comments on HN. This lets us figure out
 # what categories of comments get ranked higher than others.
 # Note that we're assuming the loss function is still MSE,
 # even though the rank isn't really normally distributed.
 model.add_categorical_feature(n_authors, n_topic_authors, name='author_id',
-                              loss_type='mean_squared_error')
+                              loss_type='mean_squared_error', n_target_out=1)
 # We have topics over different parts in the evolution of Hacker News
 # but we won't have any outcome variables for it, so don't define
 # a loss_type
@@ -92,7 +92,7 @@ for _ in range(200):
     model.top_words_per_topic('author_id', words)
     model.top_words_per_topic('time_id', words)
 
-# Visualize the model -- look at lda.ipynb to see the results
+# Visualize the model -- look at model.ipynb to see the results
 model.to_cpu()
 for component in ['story_id', 'author_id', 'time_id']:
     topics = model.prepare_topics(component, words)
