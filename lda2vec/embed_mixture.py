@@ -86,13 +86,13 @@ class EmbedMixture(chainer.Chain):
                 Batch of two-dimensional embeddings for every document.
         """
         # (batchsize, ) --> (batchsize, multinomial)
-        proportions = self.weights(doc_ids, softmax=True)
+        proportions = self.proportions(doc_ids, softmax=True)
         # (batchsize, n_factors) * (n_factors, n_dim) --> (batchsize, n_dim)
         factors = F.dropout(self.factors(), ratio=self.dropout_ratio)
         w_sum = F.matmul(proportions, factors)
         return w_sum
 
-    def weights(self, doc_ids, softmax=False):
+    def proportions(self, doc_ids, softmax=False):
         """ Given an array of document indices, return a vector
         for each document of just the unnormalized topic weights.
 
