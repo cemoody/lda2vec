@@ -1,6 +1,7 @@
 import numpy as np
 import logging
 import random
+import time
 
 import chainer
 import chainer.links as L
@@ -412,7 +413,7 @@ class LDA2Vec(chainer.Chain):
             self.categorical_feature_counts[name][uniques] += counts
 
     def fit_partial(self, words_flat, fraction, categorical_features=None,
-                    targets=None):
+                    targets=None, itr=None, n_itr=None):
         """ Train the latent document-to-topic weights, topic vectors,
         and word vectors on partial subset of the full data.
 
@@ -434,7 +435,14 @@ class LDA2Vec(chainer.Chain):
             comment or the number of votes a comment receives. The key of this
             dictionary must be a string matching the name given to the target
             loss function. The values must the outcome numpy arrays.
+        itr : int
+            Passed to fit_partial to be printed in the logger detailing which
+            iteration we're currently on.
+        n_itr : int
+            Passed to fit_partial to be printed in the logger specifying the
+            total number of iterations.
         """
+        t0 = time.time()
         self._n_partial_fits += 1
         words_flat, vcategorical_features, targets = \
             self._check_input(words_flat, categorical_features, targets)
@@ -452,8 +460,14 @@ class LDA2Vec(chainer.Chain):
         total_loss.backward()
         # Propagate gradients
         self._optimizer.update()
-        msg = "Partial fit loss: %1.5e Prior: %1.5e"
-        msg = msg % (words_loss, prior_loss.data * fraction)
+        # Report loss, speed, timings
+        t1 = time.time()
+        rate = words_flat.shape[0] / (t1 - t0)
+        msg = "Loss: %1.5e Prior: %1.5e Rate: %1.2e wps"
+        msg = msg % (words_loss, prior_loss.data * fraction, rate)
+        msg += " ETA: %1.1es" % ((n_itr - itr) * (t1 - t0))
+        if itr is not None:
+            msg += " Itr %i/%i" % (itr, n_itr)
         self.logger.info(msg)
         return total_loss
 
@@ -489,12 +503,13 @@ class LDA2Vec(chainer.Chain):
             n_cat_feats = len(args)
             if targets is not None:
                 args += targets
-            for dat in _chunks(n_chunk, words_flat, *args):
+            for j, dat in enumerate(_chunks(n_chunk, words_flat, *args)):
                 chunk = dat.pop(0)
                 cat_feat, target = dat[:n_cat_feats], dat[n_cat_feats:]
                 this_fraction = len(chunk) * 1.0 / words_flat.shape[0]
                 self.fit_partial(chunk, this_fraction,
-                                 categorical_features=cat_feat, targets=target)
+                                 categorical_features=cat_feat, targets=target,
+                                 itr=j, n_itr=int(1.0 / fraction))
 
     def prepare_topics(self, categorical_feature_name, vocab, temperature=1.0):
         """ Collects a dictionary of word, document and topic distributions.

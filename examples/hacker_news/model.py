@@ -56,7 +56,7 @@ counts = corpus.keys_counts[:n_words]
 words = corpus.word_list(vocab)[:n_words]
 
 # Fit the model
-model = LDA2Vec(n_words, n_hidden, counts, dropout_ratio=0.2)
+model = LDA2Vec(n_words, n_hidden, counts, dropout_ratio=0.2, n_samples=5)
 # We want topics over different articles, but we want those topics
 # to correlate with the article 'score'. This gives us a better idea
 # of what topics get to the top of HN
@@ -85,7 +85,7 @@ targets = [score, ranking]
 for _ in range(200):
     if gpu:
         model.to_gpu()
-    model.fit(flattened, categorical_features=cat_feats, fraction=5e-5,
+    model.fit(flattened, categorical_features=cat_feats, fraction=6e-5,
               epochs=1, targets=targets)
     serializers.save_hdf5('model.hdf5', model)
     model.to_cpu()
