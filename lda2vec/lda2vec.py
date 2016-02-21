@@ -259,11 +259,11 @@ class LDA2Vec(chainer.Chain):
         """
         losses = None
         weights = []
-        args = (data_cat_feats, self.categorical_feature_names)
-        for data_cat_feat, cat_feat_name in zip(*args):
+        args = (data_cat_feats, self.categorical_feature_names, data_targets)
+        for data_cat_feat, cat_feat_name, data_target in zip(*args):
             cat_feat = self.categorical_features[cat_feat_name]
             embedding, transform, loss_func, penalty = cat_feat
-            weights.append(embedding.unnormalized_weights(data_cat_feat))
+            weights.append(embedding.proportions(data_cat_feat, softmax=True))
             if loss_func is None:
                 continue
             # This function will input an ID and ouput
@@ -273,7 +273,8 @@ class LDA2Vec(chainer.Chain):
             # n_dim is 1 for RMSE, 1 for logistic outcomes, n for softmax
             output = transform(latent)
             # Loss_func gives likelihood of data_target given output
-            l = loss_func(output, data_targets[cat_feat_name])
+            shape = output.data.shape
+            l = loss_func(output, F.reshape(data_target, shape))
             losses = l if losses is None else losses + l
         # Construct the latent vectors for all doc_ids
         feature_values = F.concat(weights)
@@ -287,7 +288,10 @@ class LDA2Vec(chainer.Chain):
         return losses
 
     def to_var(self, c):
-        return Variable(self.xp.asarray(c.astype('int32')))
+        if 'float' in str(c.dtype):
+            return Variable(self.xp.asarray(c.astype('float32')))
+        else:
+            return Variable(self.xp.asarray(c.astype('int32')))
 
     def _check_input(self, word_matrix, categorical_features, targets):
         if word_matrix is not None:

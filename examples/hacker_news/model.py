@@ -24,13 +24,13 @@ logging.basicConfig()
 corpus = pickle.load(open('corpus', 'r'))
 vocab = pickle.load(open('vocab', 'r'))
 features = pd.read_pickle('features.pd')
-data = np.load(open('data', 'r'))
+data = np.load(open('data.npz', 'r'))
 flattened = data['flattened']
 story_id = data['story_id']
 author_id = data['author_id']
 time_id = data['time_id']
-ranking = data['ranking']
-score = data['score']
+ranking = data['ranking'].astype('float32')
+score = data['score'].astype('float32')
 
 # Model Parameters
 # Number of documents
@@ -76,6 +76,7 @@ model.finalize()
 
 # Reload model if pre-existing
 if os.path.exists('model.hdf5'):
+    print "Reloading from existing"
     serializers.load_hdf5('model.hdf5', model)
 
 # Train the model
@@ -84,7 +85,7 @@ targets = [score, ranking]
 for _ in range(200):
     if gpu:
         model.to_gpu()
-    model.fit(flattened, categorical_features=cat_feats, fraction=1e-5,
+    model.fit(flattened, categorical_features=cat_feats, fraction=5e-5,
               epochs=1, targets=targets)
     serializers.save_hdf5('model.hdf5', model)
     model.to_cpu()
