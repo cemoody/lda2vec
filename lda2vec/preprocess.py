@@ -42,22 +42,22 @@ def tokenize(texts, max_length, skip=-2, attr=LOWER, merge=False, **kwargs):
         Keys are the word index, and values are the string. The pad index gets
         mapped to None
 
-    >>> sents = [u"Do you recall", u"not long ago a@b.com", u"hello zombo.com"]
-    >>> arr, vocab = tokenize(sents, 10)
+    >>> sents = [u"Do you recall a class action lawsuit", u"hello zombo.com"]
+    >>> arr, vocab = tokenize(sents, 10, merge=True)
     >>> arr.shape[0]
-    3
+    2
     >>> arr.shape[1]
     10
     >>> w2i = {w: i for i, w in vocab.iteritems()}
     >>> arr[0, 0] == w2i[u'do']  # First word and its index should match
     True
+    >>> arr[0, 1] == w2i[u'you']
+    True
     >>> arr[0, -1]  # last word in 0th document is a pad word
     -2
-    >>> arr[1, 2] == w2i[u'ago']
+    >>> arr[0, 4] == w2i[u'class action lawsuit']  # noun phrase is tokenized
     True
-    >>> arr[1, 3]  # The email token is thrown out
-    -2
-    >>> arr[2, 1]  # The URL token is thrown out
+    >>> arr[1, 1]  # The URL token is thrown out
     -2
     """
     nlp = English()
