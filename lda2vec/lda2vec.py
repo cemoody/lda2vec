@@ -272,7 +272,7 @@ class LDA2Vec(chainer.Chain):
             latent = embedding.proportions(data_cat_feat, softmax=True)
             # Transform (batchsize, n_hidden) -> (batchsize, n_dim)
             # n_dim is 1 for RMSE, 1 for logistic outcomes, n for softmax
-            output = transform(latent)
+            output = F.dropout(transform(latent), ratio=self.dropout_ratio)
             # Loss_func gives likelihood of data_target given output
             shape = output.data.shape
             l = loss_func(output, F.reshape(data_target, shape))
@@ -455,7 +455,7 @@ class LDA2Vec(chainer.Chain):
         # Loss is composed of loss from predicting the word given context,
         # the target given the context, and the loss due to the prior
         # on the mixture embedding
-        total_loss = trget_loss + prior_loss * fraction
+        total_loss = trget_loss * fraction + prior_loss * fraction
         # Calculate back gradients
         total_loss.backward()
         # Propagate gradients
@@ -463,8 +463,9 @@ class LDA2Vec(chainer.Chain):
         # Report loss, speed, timings
         t1 = time.time()
         rate = words_flat.shape[0] / (t1 - t0)
-        msg = "Loss: %1.5e Prior: %1.5e Rate: %1.2e wps"
-        msg = msg % (words_loss, prior_loss.data * fraction, rate)
+        msg = "Loss: %1.5e Prior: %1.5e Target %1.5e Rate: %1.2e wps"
+        msg = msg % (words_loss, prior_loss.data * fraction,
+                     trget_loss.data * fraction, rate)
         msg += " ETA: %1.1es" % ((n_itr - itr) * (t1 - t0))
         if itr is not None:
             msg += " Itr %i/%i" % (itr, n_itr)
