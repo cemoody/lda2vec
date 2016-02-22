@@ -47,9 +47,9 @@ n_hidden = 300
 # Number of topics to fit for types of stories
 n_topic_stories = 30
 # Number of topics to fit for types of authors
-n_topic_authors = 30
+n_topic_authors = 10
 # Number of topics to fit for types of days
-n_topic_times = 30
+n_topic_times = 10
 # Get the count for each key
 counts = corpus.keys_counts[:n_words]
 # Get the string representation for every compact key
