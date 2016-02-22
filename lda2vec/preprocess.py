@@ -1,10 +1,7 @@
-import os
-from spacy.en import English, LOCAL_DATA_DIR
+from spacy.en import English
 from spacy.attrs import LOWER, LIKE_URL, LIKE_EMAIL
 
 import numpy as np
-
-nlp = None
 
 
 def tokenize(texts, max_length, skip=-2, attr=LOWER, merge=False, **kwargs):
@@ -33,7 +30,8 @@ def tokenize(texts, max_length, skip=-2, attr=LOWER, merge=False, **kwargs):
         into a single token.
     kwargs : dict, optional
         Any further argument will be sent to the spaCy tokenizer. For extra
-        speed consider setting tag=False, parse=False, entity=False.
+        speed consider setting tag=False, parse=False, entity=False, or
+        n_threads=8.
 
     Returns
     -------
@@ -62,14 +60,11 @@ def tokenize(texts, max_length, skip=-2, attr=LOWER, merge=False, **kwargs):
     >>> arr[2, 1]  # The URL token is thrown out
     -2
     """
-    global nlp
-    if nlp is None:
-        data_dir = os.environ.get('SPACY_DATA', LOCAL_DATA_DIR)
-        nlp = English(data_dir=data_dir)
+    nlp = English()
     data = np.zeros((len(texts), max_length), dtype='int32')
     data[:] = skip
     bad_deps = ('amod', 'compound')
-    for row, doc in enumerate(nlp.pipe(texts, n_threads=4)):
+    for row, doc in enumerate(nlp.pipe(texts, **kwargs)):
         if merge:
             # from the spaCy blog, an example on how to merge
             # noun phrases into single tokens
