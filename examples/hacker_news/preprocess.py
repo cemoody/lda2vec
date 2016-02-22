@@ -13,7 +13,7 @@ import os.path
 
 logging.basicConfig()
 
-max_length = 250   # Limit of 250 words per comment
+max_length = 350   # Limit of 250 words per comment
 min_author_comments = 10  # Exclude authors with fewer comments
 min_story_comments = 10  # Exclude stories with fewer comments
 nrows = None  # Number of rows of file to read; None reads in full file
@@ -40,8 +40,8 @@ for col, dtype in zip(features.columns, features.dtypes):
 # Tokenize the texts
 # If this fails try running python -m spacy.en.download all --force
 texts = features.pop('comment_text').values
-tokens, vocab = preprocess.tokenize(texts, max_length, tag=False, n_threads=4,
-                                    parse=False, entity=False, merge=True)
+tokens, vocab = preprocess.tokenize(texts, max_length, n_threads=4,
+                                    merge=True)
 del texts
 
 # Make a ranked list of rare vs frequent words
