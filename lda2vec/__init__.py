@@ -10,5 +10,4 @@ EmbedMixture = embed_mixture.EmbedMixture
 LDA2Vec = lda2vec.LDA2Vec
 Tracking = tracking.Tracking
 tokenize = preprocess.tokenize
-nlp = preprocess.nlp
 Corpus = corpus.Corpus

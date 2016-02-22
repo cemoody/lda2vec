@@ -38,9 +38,10 @@ for col, dtype in zip(features.columns, features.dtypes):
         features[col] = features[col].astype('int32')
 
 # Tokenize the texts
+# If this fails try running python -m spacy.en.download all --force
 texts = features.pop('comment_text').values
-tokens, vocab = preprocess.tokenize(texts, max_length, tag=False,
-                                    parse=False, entity=False)
+tokens, vocab = preprocess.tokenize(texts, max_length, tag=False, n_threads=4,
+                                    parse=False, entity=False, merge=True)
 del texts
 
 # Make a ranked list of rare vs frequent words
