@@ -87,11 +87,6 @@ Minimum requirements:
 - Chainer 1.5.1+
 - spaCy 0.99+
 
-In addtion, you must run the following command to download to the spaCy corpus:
-  
-    python -m spacy.en.download
-
-
 Requirements for some features:
 
 - CUDA support

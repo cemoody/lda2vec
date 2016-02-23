@@ -1,5 +1,5 @@
 import os
-from spacy.en import English, LOCAL_DATA_DIR
+from spacy.en import English
 from spacy.attrs import LOWER, LIKE_URL, LIKE_EMAIL
 
 import numpy as np
@@ -61,8 +61,8 @@ def tokenize(texts, max_length, skip=-2, attr=LOWER, **kwargs):
     """
     global nlp
     if nlp is None:
-        data_dir = os.environ.get('SPACY_DATA', LOCAL_DATA_DIR)
-        nlp = English(data_dir=data_dir)
+        # data_dir = os.environ.get('SPACY_DATA', LOCAL_DATA_DIR)
+        nlp = English()
     data = np.zeros((len(texts), max_length), dtype='int32')
     data[:] = skip
     for row, text in enumerate(texts):
