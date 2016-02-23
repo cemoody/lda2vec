@@ -1,5 +1,5 @@
 chainer>=1.5.1
 numpy>=1.10
-spacy>=0.9
+spacy>=0.100
 scipy>=0.16.0
 sklearn

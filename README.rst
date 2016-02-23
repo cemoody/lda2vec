@@ -87,7 +87,6 @@ Minimum requirements:
 - Chainer 1.5.1+
 - spaCy 0.99+
 
-
 Requirements for some features:
 
 - CUDA support
