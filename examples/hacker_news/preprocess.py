@@ -8,7 +8,7 @@ from lda2vec import preprocess, Corpus
 import numpy as np
 import pandas as pd
 import logging
-import pickle
+import cPickle as pickle
 import os.path
 
 logging.basicConfig()
@@ -40,8 +40,8 @@ for col, dtype in zip(features.columns, features.dtypes):
 # Tokenize the texts
 # If this fails try running python -m spacy.en.download all --force
 texts = features.pop('comment_text').values
-tokens, vocab = preprocess.tokenize(texts, max_length, n_threads=8,
-                                    merge=True, batch_size=1000)
+tokens, vocab = preprocess.tokenize(texts, max_length, n_threads=4,
+                                    merge=True)
 del texts
 
 # Make a ranked list of rare vs frequent words
@@ -54,17 +54,25 @@ corpus.finalize()
 # This builds a new compact index
 compact = corpus.to_compact(tokens)
 # Remove extremely rare words
-pruned = corpus.filter_count(compact, min_count=50)
+pruned = corpus.filter_count(compact, min_count=10)
 # Words tend to have power law frequency, so selectively
 # downsample the most prevalent words
 clean = corpus.subsample_frequent(pruned)
+print "n_words", np.unique(clean).max()
 
 # Extract numpy arrays over the fields we want covered by topics
 # Convert to categorical variables
 author_id = pd.Categorical(features['comment_author']).codes
 story_id = pd.Categorical(features['story_id']).codes
-# Chop dates into 100 epochs
-time_id = pd.cut(pd.Categorical(features['story_time']), 100).codes
+# Chop dates into weeks
+story_time = pd.to_datetime(features['story_time'], unit='s')
+year_min = story_time.dt.year.min()
+weeks_since = (story_time.dt.year - year_min) * 53 + story_time.dt.week
+time_id = weeks_since.values.astype('int32')
+
+print "n_authors", author_id.max()
+print "n_stories", story_id.max()
+print "n_times", time_id.max()
 
 # Extract outcome supervised features
 ranking = features['comment_ranking'].values
@@ -79,8 +87,8 @@ flattened, features_flat = corpus.compact_to_flat(pruned, *feature_arrs)
 (story_id_f, author_id_f, time_id_f, ranking_f, score_f) = features_flat
 
 # Save the data
-pickle.dump(corpus, open('corpus', 'w'))
-pickle.dump(vocab, open('vocab', 'w'))
+pickle.dump(corpus, open('corpus', 'w'), protocol=2)
+pickle.dump(vocab, open('vocab', 'w'), protocol=2)
 features.to_pickle('features.pd')
 data = dict(flattened=flattened, story_id=story_id_f, author_id=author_id_f,
             time_id=time_id_f, ranking=ranking_f, score=score_f)

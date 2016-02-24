@@ -13,6 +13,16 @@ from embed_mixture import EmbedMixture
 from dirichlet_likelihood import dirichlet_likelihood
 
 
+def timeit(method):
+    def timed(*args, **kw):
+        ts = time.time()
+        result = method(*args, **kw)
+        te = time.time()
+        print '%2.4f sec %r' % (te - ts, method.__name__)
+        return result
+    return timed
+
+
 class LDA2Vec(chainer.Chain):
     _loss_types = ['sigmoid_cross_entropy', 'softmax_cross_entropy',
                    'hinge', 'mean_squared_error']
@@ -81,7 +91,7 @@ class LDA2Vec(chainer.Chain):
 
     def add_categorical_feature(self, n_possible_values, n_latent_factors,
                                 covariance_penalty=None, loss_type=None,
-                                n_target_out=1, name=None):
+                                n_target_out=1, name=None, l2_penalty=None):
         """ Add a categorical feature to the context. You must add categorical_features
         in the order in which they'll appear when `fit` is called. Optionally
         make it a supervised feature.
@@ -105,6 +115,9 @@ class LDA2Vec(chainer.Chain):
         n_target_out : int
             Dimensionality of the target. If predicting a scalar output, this
             should be 1. Otherwise should be the rank of the output.
+        l2_penalty : float
+            If the categorical feature is spatially continuous, like week
+            number or latitude, this enforces that nearby points are similar.
         """
         em = EmbedMixture(n_possible_values, n_latent_factors, self.n_hidden,
                           dropout_ratio=self.dropout_ratio)
@@ -123,7 +136,7 @@ class LDA2Vec(chainer.Chain):
         else:
             self.logger.info("Added categorical_feature %s" % name)
         self.categorical_features[name] = (em, transform, loss_func,
-                                           covariance_penalty)
+                                           covariance_penalty, l2_penalty)
         counts = np.zeros(n_possible_values).astype('int32')
         self.categorical_feature_counts[name] = counts
         self.categorical_feature_names.append(name)
@@ -168,7 +181,8 @@ class LDA2Vec(chainer.Chain):
         loss_func.W.data[:] = data[:].astype('float32')
         kwargs = dict(vocab=L.EmbedID(self.n_words, self.n_hidden),
                       loss_func=loss_func)
-        for name, (em, transform, lf, cp) in self.categorical_features.items():
+        for name, (em, transform, lf, cp, lp) in \
+                self.categorical_features.items():
             kwargs[name + '_mixture'] = em
             if transform is not None:
                 kwargs[name + '_linear'] = transform
@@ -199,29 +213,38 @@ class LDA2Vec(chainer.Chain):
         """ Measure likelihood of seeing topic proportions"""
         loss = None
         for cat_feat_name, vals in self.categorical_features.items():
-            embedding, transform, loss_func, penalty = vals
+            embedding, transform, loss_func, penalty, l2_penalty = vals
             name = cat_feat_name + "_mixture"
             dl = dirichlet_likelihood(self[name].weights)
             if penalty:
                 factors = self[name].factors.W
                 cc = F.cross_covariance(factors, factors)
                 dl += cc
+            if l2_penalty:
+                weights = self[name].weights.W
+                top = Variable(weights.data[None, 0, :].T)
+                bot = Variable(weights.data[None, -1, :].T)
+                left = F.transpose(F.concat((top, F.transpose(weights))))
+                rght = F.transpose(F.concat((F.transpose(weights), bot)))
+                lp = F.mean_squared_error(left, rght)
+                dl += lp
             loss = dl if loss is None else dl + loss
         return loss
 
-    def _loss(self, context, target, weight):
-        _context = F.dropout(context, ratio=self.dropout_ratio)
-        _word = F.dropout(self.vocab(target), ratio=self.dropout_ratio)
-        dot = -F.log(F.sigmoid(F.sum(_context * _word, axis=1)) + 1e-9)
-        return F.sum(dot * weight)
-
     def _neg_sample(self, context, target, weight):
-        batchsize = target.data.shape[0]
-        loss = self._loss(context, target, weight)
-        samples = self.loss_func.sampler.sample((self.n_samples, batchsize))
-        for sample in samples:
-            sample = Variable(self.xp.asarray(sample))
-            loss += self._loss(-context, sample, weight)
+        batchsize = target.shape[0]
+        pos = target[None, :]
+        neg = self.loss_func.sampler.sample((self.n_samples, batchsize))
+        samples = Variable(self.xp.concatenate((pos, neg)))
+        words = F.dropout(self.vocab(samples), ratio=self.dropout_ratio)
+        one = self.xp.ones_like(pos)
+        zero = self.xp.zeros_like(neg)
+        targets = Variable(self.xp.concatenate((one, zero)))
+        # words is shape (n_samples, batchsize, dim)
+        # context is shape (batchsize, dim)
+        bcontext, bwords = F.broadcast(context, words)
+        inner = F.sum(bcontext * bwords, axis=2)
+        loss = F.sigmoid_cross_entropy(inner, targets)
         return loss
 
     def _skipgram_flat(self, words, cat_feats, ignore_below=3):
@@ -247,11 +270,11 @@ class LDA2Vec(chainer.Chain):
                 wd = (wd > self.dropout_word).astype('bool')
                 weight = np.logical_and(weight, wd)
             weight = Variable(xp.asarray(weight * 1.0).astype('float32'))
-            target = Variable(cwords[window + offset: -(window + 1) + offset])
+            target = cwords[window + offset: -(window + 1) + offset]
             l = self._neg_sample(cntxt, target, weight)
-            loss = l if loss is None else loss + l
-        loss.backward()
-        return loss.data + 0.0
+            loss = l.data if loss is None else loss + l.data
+            l.backward()
+        return loss
 
     def _target(self, data_cat_feats, data_targets):
         """ Calculate the local losses relating individual document topic
@@ -263,7 +286,7 @@ class LDA2Vec(chainer.Chain):
         args = (data_cat_feats, self.categorical_feature_names, data_targets)
         for data_cat_feat, cat_feat_name, data_target in zip(*args):
             cat_feat = self.categorical_features[cat_feat_name]
-            embedding, transform, loss_func, penalty = cat_feat
+            embedding, transform, loss_func, penalty, l2_penalty = cat_feat
             weights.append(embedding.proportions(data_cat_feat, softmax=True))
             if loss_func is None:
                 continue

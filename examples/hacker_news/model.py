@@ -11,7 +11,7 @@ import pandas as pd
 import numpy as np
 import os.path
 import logging
-import pickle
+import cPickle as pickle
 
 # Optional: moving the model to the GPU makes it ~10x faster
 # set to False if you're having problems with Chainer and CUDA
@@ -45,9 +45,9 @@ n_words = flattened.max() + 1
 # (if using pretrained vectors, should match that dimensionality)
 n_hidden = 300
 # Number of topics to fit for types of stories
-n_topic_stories = 30
+n_topic_stories = 50
 # Number of topics to fit for types of authors
-n_topic_authors = 10
+n_topic_authors = 20
 # Number of topics to fit for types of days
 n_topic_times = 10
 # Get the count for each key
@@ -55,8 +55,13 @@ counts = corpus.keys_counts[:n_words]
 # Get the string representation for every compact key
 words = corpus.word_list(vocab)[:n_words]
 
+print "n_words", n_words
+print "n_stories", n_stories
+print "n_authors", n_authors
+print "n_times", n_times
+
 # Fit the model
-model = LDA2Vec(n_words, n_hidden, counts, dropout_ratio=0.2, n_samples=5)
+model = LDA2Vec(n_words, n_hidden, counts, dropout_ratio=0.5, n_samples=10)
 # We want topics over different articles, but we want those topics
 # to correlate with the article 'score'. This gives us a better idea
 # of what topics get to the top of HN
@@ -70,8 +75,10 @@ model.add_categorical_feature(n_authors, n_topic_authors, name='author_id',
                               loss_type='mean_squared_error', n_target_out=1)
 # We have topics over different parts in the evolution of Hacker News
 # but we won't have any outcome variables for it, so don't define
-# a loss_type
-model.add_categorical_feature(n_times, n_topic_times, name='time_id')
+# a loss_type. We impose an L2 penalty though, which forces nearby
+# times to have similar topics.
+model.add_categorical_feature(n_times, n_topic_times, name='time_id',
+                              l2_penalty=True)
 model.finalize()
 
 # Reload model if pre-existing
@@ -85,7 +92,7 @@ targets = [score, ranking]
 for _ in range(200):
     if gpu:
         model.to_gpu()
-    model.fit(flattened, categorical_features=cat_feats, fraction=6e-5,
+    model.fit(flattened, categorical_features=cat_feats, fraction=17e-5,
               epochs=1, targets=targets)
     serializers.save_hdf5('model.hdf5', model)
     model.to_cpu()
