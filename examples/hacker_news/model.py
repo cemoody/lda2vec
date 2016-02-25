@@ -61,7 +61,7 @@ print "n_authors", n_authors
 print "n_times", n_times
 
 # Fit the model
-model = LDA2Vec(n_words, n_hidden, counts, dropout_ratio=0.5, n_samples=10)
+model = LDA2Vec(n_words, n_hidden, counts, dropout_ratio=0.5, n_samples=5)
 # We want topics over different articles, but we want those topics
 # to correlate with the article 'score'. This gives us a better idea
 # of what topics get to the top of HN
@@ -92,7 +92,7 @@ targets = [score, ranking]
 for _ in range(200):
     if gpu:
         model.to_gpu()
-    model.fit(flattened, categorical_features=cat_feats, fraction=17e-5,
+    model.fit(flattened, categorical_features=cat_feats, fraction=15e-5,
               epochs=1, targets=targets)
     serializers.save_hdf5('model.hdf5', model)
     model.to_cpu()

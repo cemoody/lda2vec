@@ -478,7 +478,7 @@ class LDA2Vec(chainer.Chain):
         # Loss is composed of loss from predicting the word given context,
         # the target given the context, and the loss due to the prior
         # on the mixture embedding
-        total_loss = trget_loss * fraction + prior_loss * fraction
+        total_loss = trget_loss + prior_loss * fraction
         # Calculate back gradients
         total_loss.backward()
         # Propagate gradients
@@ -595,7 +595,8 @@ class LDA2Vec(chainer.Chain):
         for j, topic_to_word in enumerate(data['topic_term_dists']):
             top = np.argsort(topic_to_word)[::-1][:top_n]
             prefix = "Top words in topic %i " % j
-            print prefix + ' '.join([data['vocab'][i].strip() for i in top])
+            print prefix + ' '.join([data['vocab'][i].strip().replace(' ', '_')
+                                    for i in top])
 
 
 def _chunks(n, *args):
