@@ -66,19 +66,18 @@ model = LDA2Vec(n_words, n_hidden, counts, dropout_ratio=0.5, n_samples=5)
 # to correlate with the article 'score'. This gives us a better idea
 # of what topics get to the top of HN
 model.add_categorical_feature(n_stories, n_topic_stories, name='story_id',
-                              loss_type='mean_squared_error', n_target_out=1)
+                              loss_type='mean_squared_error', n_target_out=1,
+                              logdet_penalty=1e-3)
 # This gives us topics over comments on HN. This lets us figure out
 # what categories of comments get ranked higher than others.
 # Note that we're assuming the loss function is still MSE,
 # even though the rank isn't really normally distributed.
-model.add_categorical_feature(n_authors, n_topic_authors, name='author_id',
-                              loss_type='mean_squared_error', n_target_out=1)
+model.add_categorical_feature(n_authors, n_topic_authors, name='author_id')
 # We have topics over different parts in the evolution of Hacker News
 # but we won't have any outcome variables for it, so don't define
-# a loss_type. We impose an L2 penalty though, which forces nearby
-# times to have similar topics.
-model.add_categorical_feature(n_times, n_topic_times, name='time_id',
-                              l2_penalty=True)
+# a loss_type.
+# model.add_categorical_feature(n_times, n_topic_times, name='time_id',
+#                               logdet_penalty=1e-3)
 model.finalize()
 
 # Reload model if pre-existing
@@ -87,21 +86,24 @@ if os.path.exists('model.hdf5'):
     serializers.load_hdf5('model.hdf5', model)
 
 # Train the model
-cat_feats = [story_id, author_id, time_id]
-targets = [score, ranking]
+cat_feats = [story_id, author_id]
+targets = [score]
 for _ in range(200):
-    if gpu:
-        model.to_gpu()
-    model.fit(flattened, categorical_features=cat_feats, fraction=15e-5,
-              epochs=1, targets=targets)
-    serializers.save_hdf5('model.hdf5', model)
     model.to_cpu()
     model.top_words_per_topic('story_id', words)
     model.top_words_per_topic('author_id', words)
-    model.top_words_per_topic('time_id', words)
+    if gpu:
+        model.to_gpu()
+    model.fit(flattened, categorical_features=cat_feats, fraction=16e-5,
+              epochs=1, targets=targets)
+    serializers.save_hdf5('model.hdf5', model)
+
+model.to_cpu()
+model.top_words_per_topic('story_id', words)
+model.top_words_per_topic('author_id', words)
+model.top_words_per_topic('time_id', words)
 
 # Visualize the model -- look at model.ipynb to see the results
-model.to_cpu()
 for component in ['story_id', 'author_id', 'time_id']:
     topics = model.prepare_topics(component, words)
     np.savez('topics.%s.pyldavis' % component, **topics)

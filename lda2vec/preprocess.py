@@ -4,7 +4,8 @@ from spacy.attrs import LOWER, LIKE_URL, LIKE_EMAIL
 import numpy as np
 
 
-def tokenize(texts, max_length, skip=-2, attr=LOWER, merge=False, **kwargs):
+def tokenize(texts, max_length, skip=-2, attr=LOWER, merge=False, nlp=None,
+             **kwargs):
     """ Uses spaCy to quickly tokenize text and return an array
     of indices.
 
@@ -28,6 +29,9 @@ def tokenize(texts, max_length, skip=-2, attr=LOWER, merge=False, **kwargs):
     merge : int, optional
         Merge noun phrases into a single token. Useful for turning 'New York'
         into a single token.
+    nlp : None
+        A spaCy NLP object. Useful for not reinstantiating the object multiple
+        times.
     kwargs : dict, optional
         Any further argument will be sent to the spaCy tokenizer. For extra
         speed consider setting tag=False, parse=False, entity=False, or
@@ -60,7 +64,8 @@ def tokenize(texts, max_length, skip=-2, attr=LOWER, merge=False, **kwargs):
     >>> arr[1, 1]  # The URL token is thrown out
     -2
     """
-    nlp = English()
+    if nlp is None:
+        nlp = English()
     data = np.zeros((len(texts), max_length), dtype='int32')
     data[:] = skip
     bad_deps = ('amod', 'compound')
