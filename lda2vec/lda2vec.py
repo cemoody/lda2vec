@@ -23,6 +23,17 @@ def timeit(method):
     return timed
 
 
+def _chunks(n, *args):
+    """Yield successive n-sized chunks from l."""
+    # From stackoverflow question 312443
+    keypoints = []
+    for i in xrange(0, len(args[0]), n):
+        keypoints.append((i, i + n))
+    random.shuffle(keypoints)
+    for a, b in keypoints:
+        yield [arg[a: b] for arg in args]
+
+
 class LDA2Vec(chainer.Chain):
     _loss_types = ['sigmoid_cross_entropy', 'softmax_cross_entropy',
                    'hinge', 'mean_squared_error']
@@ -261,7 +272,7 @@ class LDA2Vec(chainer.Chain):
             loss = dl if loss is None else dl + loss
         return loss
 
-    def _neg_sample(self, context, target):
+    def _neg_sample(self, context, target, weight):
         batchsize = target.shape[0]
         pos = target[None, :]
         neg = self.loss_func.sampler.sample((self.n_samples, batchsize))
@@ -272,9 +283,11 @@ class LDA2Vec(chainer.Chain):
         targets = Variable(self.xp.concatenate((one, zero)))
         # words is shape (n_samples, batchsize, dim)
         # context is shape (batchsize, dim)
-        bcontext, bwords = F.broadcast(context, words)
-        inner = F.sum(bcontext * bwords, axis=2)
-        loss = F.sigmoid_cross_entropy(inner, targets)
+        bcontext, bwords = F.broadcast(context, words, weight)
+        inner = bcontext * bwords
+        loss = F.sum(F.softplus(-inner) * weight)
+        loss += F.sum(inner * weight)
+        loss -= F.sum(inner * targets * weight)
         return loss
 
     def _skipgram_flat(self, words, cat_feats):
@@ -300,9 +313,8 @@ class LDA2Vec(chainer.Chain):
                 wd = (wd > self.dropout_word).astype('bool')
                 weight = np.logical_and(weight, wd)
             target = cwords[window + offset: -(window + 1) + offset]
-            weight = self.xp.asarray(weight)
-            itarget = target * weight + weight - 1
-            l = self._neg_sample(cntxt, itarget)
+            weight = Variable(self.xp.asarray(weight * 1.0).astype('float32'))
+            l = self._neg_sample(cntxt, target, weight)
             loss = l.data if loss is None else loss + l.data
             l.backward()
         return loss
@@ -520,7 +532,7 @@ class LDA2Vec(chainer.Chain):
         t1 = time.time()
         rate = words_flat.shape[0] / (t1 - t0)
         msg = "Loss: %1.5e Prior: %1.5e Target %1.5e Rate: %1.2e wps"
-        msg = msg % (words_loss, prior_loss.data * fraction,
+        msg = msg % (words_loss * fraction, prior_loss.data * fraction,
                      trget_loss.data, rate)
         msg += " ETA: %1.1es" % ((n_itr - itr) * (t1 - t0))
         if itr is not None:
@@ -641,14 +653,3 @@ class LDA2Vec(chainer.Chain):
             prefix = "Top words in topic %i " % j
             print prefix + ' '.join([data['vocab'][i].strip().replace(' ', '_')
                                     for i in top])
-
-
-def _chunks(n, *args):
-    """Yield successive n-sized chunks from l."""
-    # From stackoverflow question 312443
-    keypoints = []
-    for i in xrange(0, len(args[0]), n):
-        keypoints.append((i, i + n))
-    random.shuffle(keypoints)
-    for a, b in keypoints:
-        yield [arg[a: b] for arg in args]
