@@ -92,7 +92,7 @@ for _ in range(200):
     model.top_words_per_topic('document_id', words)
     if gpu:
         model.to_gpu()
-    model.fit(flattened, categorical_features=[doc_ids], fraction=1e-2,
+    model.fit(flattened, categorical_features=[doc_ids], fraction=3e-3,
               epochs=3)
     serializers.save_hdf5('model.hdf5', model)
     model.to_cpu()

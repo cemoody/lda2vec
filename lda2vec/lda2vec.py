@@ -280,14 +280,19 @@ class LDA2Vec(chainer.Chain):
         words = F.dropout(self.vocab(samples), ratio=self.dropout_ratio)
         one = self.xp.ones_like(pos)
         zero = self.xp.zeros_like(neg)
-        targets = Variable(self.xp.concatenate((one, zero)))
+        btargets = Variable(self.xp.concatenate((one, zero)).astype('float32'))
         # words is shape (n_samples, batchsize, dim)
         # context is shape (batchsize, dim)
-        bcontext, bwords = F.broadcast(context, words, weight)
+        bshape = (btargets.data.shape[0], btargets.data.shape[1], 1)
+        bweight = F.reshape(weight, (weight.data.shape[0], 1))
+        btargets = F.reshape(btargets, bshape)
+        bcontext, bwords = F.broadcast(context, words)
+        bcontext, bweight = F.broadcast(bcontext, bweight)
+        bcontext, btargets = F.broadcast(bcontext, btargets)
         inner = bcontext * bwords
-        loss = F.sum(F.softplus(-inner) * weight)
-        loss += F.sum(inner * weight)
-        loss -= F.sum(inner * targets * weight)
+        loss = F.sum(F.softplus(-inner) * bweight)
+        loss += F.sum(inner * bweight)
+        loss -= F.sum(inner * btargets * bweight)
         return loss
 
     def _skipgram_flat(self, words, cat_feats):
@@ -422,7 +427,7 @@ class LDA2Vec(chainer.Chain):
         categorical_features: int array
             Array of categorical_features that compute the context
         temperature : float, default=1.0
-            Inifinite temperature encourages all probability to spread out
+            Infinite temperature encourages all probability to spread out
             evenly, but zero temperature encourages the probability to be
             mapped to a single word.
 
