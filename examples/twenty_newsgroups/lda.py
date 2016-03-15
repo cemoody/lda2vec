@@ -25,8 +25,8 @@ texts = [unicode(d) for d in texts]
 
 # Preprocess data
 max_length = 10000   # Limit of 10k words per document
-tokens, vocab = preprocess.tokenize(texts, max_length, tag=False,
-                                    parse=False, entity=False)
+tokens, vocab = preprocess.tokenize(texts, max_length, merge=True,
+                                    n_threads=4)
 corpus = Corpus()
 # Make a ranked list of rare vs frequent words
 corpus.update_word_count(tokens)
@@ -36,7 +36,7 @@ corpus.finalize()
 # This builds a new compact index
 compact = corpus.to_compact(tokens)
 # Remove extremely rare words
-pruned = corpus.filter_count(compact, min_count=50)
+pruned = corpus.filter_count(compact, min_count=10)
 # Words tend to have power law frequency, so selectively
 # downsample the most prevalent words
 clean = corpus.subsample_frequent(pruned)
@@ -77,8 +77,8 @@ for _ in range(200):
     model.top_words_per_topic('document_id', words)
     if gpu:
         model.to_gpu()
-    model.fit(flattened, categorical_features=[doc_ids], fraction=1e-3,
-              epochs=1)
+    model.fit(flattened, categorical_features=[doc_ids], fraction=1e-2,
+              epochs=3)
     serializers.save_hdf5('model.hdf5', model)
     model.to_cpu()
 model.top_words_per_topic('document_id', words)

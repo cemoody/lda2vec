@@ -261,7 +261,7 @@ class LDA2Vec(chainer.Chain):
             loss = dl if loss is None else dl + loss
         return loss
 
-    def _neg_sample(self, context, target, weight):
+    def _neg_sample(self, context, target):
         batchsize = target.shape[0]
         pos = target[None, :]
         neg = self.loss_func.sampler.sample((self.n_samples, batchsize))
@@ -277,7 +277,7 @@ class LDA2Vec(chainer.Chain):
         loss = F.sigmoid_cross_entropy(inner, targets)
         return loss
 
-    def _skipgram_flat(self, words, cat_feats, ignore_below=3):
+    def _skipgram_flat(self, words, cat_feats):
         if type(cat_feats) is not list:
             cat_feats = [cat_feats]
         window = self.window
@@ -299,9 +299,10 @@ class LDA2Vec(chainer.Chain):
                 wd = np.random.uniform(0, 1, weight.shape[0])
                 wd = (wd > self.dropout_word).astype('bool')
                 weight = np.logical_and(weight, wd)
-            weight = Variable(xp.asarray(weight * 1.0).astype('float32'))
             target = cwords[window + offset: -(window + 1) + offset]
-            l = self._neg_sample(cntxt, target, weight)
+            weight = self.xp.asarray(weight)
+            itarget = target * weight + weight - 1
+            l = self._neg_sample(cntxt, itarget)
             loss = l.data if loss is None else loss + l.data
             l.backward()
         return loss
