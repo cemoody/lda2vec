@@ -272,27 +272,34 @@ class LDA2Vec(chainer.Chain):
             loss = dl if loss is None else dl + loss
         return loss
 
+    def _loss_direct(self, context, target, weight):
+        # Hits 2.02e+04 wps
+        _context = F.dropout(context, ratio=self.dropout_ratio)
+        _word = F.dropout(self.vocab(target), ratio=self.dropout_ratio)
+        dot = -F.log(F.sigmoid(F.sum(_context * _word, axis=1)) + 1e-9)
+        return F.sum(dot * weight)
+
+    def _loss(self, context, target, weight):
+        # Hits 8.625e+03 wps with both dot products as matmuls
+        batchsize = context.data.shape[0]
+        ndim = context.data.shape[1]
+        lshape = (batchsize, ndim, 1)
+        rshape = (batchsize, 1, ndim)
+        _context = F.dropout(context, ratio=self.dropout_ratio)
+        _context = F.reshape(_context, lshape)
+        _word = F.dropout(self.vocab(target), ratio=self.dropout_ratio)
+        _word = F.reshape(_word, rshape)
+        inner = F.batch_matmul(_word, _context)
+        dot = -F.log(F.sigmoid(inner) + 1e-9)
+        return F.sum(F.reshape(dot, (batchsize,)) * weight)
+
     def _neg_sample(self, context, target, weight):
-        batchsize = target.shape[0]
-        pos = target[None, :]
-        neg = self.loss_func.sampler.sample((self.n_samples, batchsize))
-        samples = Variable(self.xp.concatenate((pos, neg)))
-        words = F.dropout(self.vocab(samples), ratio=self.dropout_ratio)
-        one = self.xp.ones_like(pos)
-        zero = self.xp.zeros_like(neg)
-        btargets = Variable(self.xp.concatenate((one, zero)).astype('float32'))
-        # words is shape (n_samples, batchsize, dim)
-        # context is shape (batchsize, dim)
-        bshape = (btargets.data.shape[0], btargets.data.shape[1], 1)
-        bweight = F.reshape(weight, (weight.data.shape[0], 1))
-        btargets = F.reshape(btargets, bshape)
-        bcontext, bwords = F.broadcast(context, words)
-        bcontext, bweight = F.broadcast(bcontext, bweight)
-        bcontext, btargets = F.broadcast(bcontext, btargets)
-        inner = bcontext * bwords
-        loss = F.sum(F.softplus(-inner) * bweight)
-        loss += F.sum(inner * bweight)
-        loss -= F.sum(inner * btargets * bweight)
+        batchsize = target.data.shape[0]
+        loss = self._loss(context, target, weight)
+        samples = self.loss_func.sampler.sample((self.n_samples, batchsize))
+        for sample in samples:
+            sample = Variable(self.xp.asarray(sample))
+            loss += self._loss(-context, sample, weight)
         return loss
 
     def _skipgram_flat(self, words, cat_feats):
@@ -317,7 +324,7 @@ class LDA2Vec(chainer.Chain):
                 wd = np.random.uniform(0, 1, weight.shape[0])
                 wd = (wd > self.dropout_word).astype('bool')
                 weight = np.logical_and(weight, wd)
-            target = cwords[window + offset: -(window + 1) + offset]
+            target = Variable(cwords[window + offset: -(window + 1) + offset])
             weight = Variable(self.xp.asarray(weight * 1.0).astype('float32'))
             l = self._neg_sample(cntxt, target, weight)
             loss = l.data if loss is None else loss + l.data

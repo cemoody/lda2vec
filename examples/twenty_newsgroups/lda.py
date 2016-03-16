@@ -39,7 +39,7 @@ if not os.path.exists('doc_ids.npy'):
     # This builds a new compact index
     compact = corpus.to_compact(tokens)
     # Remove extremely rare words
-    pruned = corpus.filter_count(compact, min_count=10)
+    pruned = corpus.filter_count(compact, min_count=30)
     # Words tend to have power law frequency, so selectively
     # downsample the most prevalent words
     clean = corpus.subsample_frequent(pruned)
@@ -92,7 +92,7 @@ for _ in range(200):
     model.top_words_per_topic('document_id', words)
     if gpu:
         model.to_gpu()
-    model.fit(flattened, categorical_features=[doc_ids], fraction=3e-3,
+    model.fit(flattened, categorical_features=[doc_ids], fraction=1e-2,
               epochs=3)
     serializers.save_hdf5('model.hdf5', model)
     model.to_cpu()
