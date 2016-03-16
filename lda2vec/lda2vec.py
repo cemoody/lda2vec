@@ -272,34 +272,27 @@ class LDA2Vec(chainer.Chain):
             loss = dl if loss is None else dl + loss
         return loss
 
-    def _loss_direct(self, context, target, weight):
-        # Hits 2.02e+04 wps
-        _context = F.dropout(context, ratio=self.dropout_ratio)
-        _word = F.dropout(self.vocab(target), ratio=self.dropout_ratio)
-        dot = -F.log(F.sigmoid(F.sum(_context * _word, axis=1)) + 1e-9)
-        return F.sum(dot * weight)
-
     def _loss(self, context, target, weight):
-        # Hits 8.625e+03 wps with both dot products as matmuls
-        batchsize = context.data.shape[0]
-        ndim = context.data.shape[1]
-        lshape = (batchsize, ndim, 1)
-        rshape = (batchsize, 1, ndim)
         _context = F.dropout(context, ratio=self.dropout_ratio)
-        _context = F.reshape(_context, lshape)
         _word = F.dropout(self.vocab(target), ratio=self.dropout_ratio)
-        _word = F.reshape(_word, rshape)
-        inner = F.batch_matmul(_word, _context)
-        dot = -F.log(F.sigmoid(inner) + 1e-9)
-        return F.sum(F.reshape(dot, (batchsize,)) * weight)
+        dot = F.softplus(-F.sum(_context * _word, axis=1))
+        return F.sum(dot * weight)
 
     def _neg_sample(self, context, target, weight):
         batchsize = target.data.shape[0]
-        loss = self._loss(context, target, weight)
         samples = self.loss_func.sampler.sample((self.n_samples, batchsize))
-        for sample in samples:
-            sample = Variable(self.xp.asarray(sample))
-            loss += self._loss(-context, sample, weight)
+        samples = Variable(self.xp.ravel(samples))
+        # We construct a minibatch of positive examples followed
+        # by n_samples number of negative samples
+        # Which means the first context is positive the following are negative
+        # and the weights are copied identically
+        # and the targets are first observed and then drawn from the negative
+        # sampling distribution
+        pos_neg = (context, ) + (-context,) * self.n_samples
+        contexts = F.concat(pos_neg, axis=0)
+        weights = F.concat((weight, ) * (self.n_samples + 1), axis=0)
+        targets = F.concat((target, samples), axis=0)
+        loss = self._loss(contexts, targets, weights)
         return loss
 
     def _skipgram_flat(self, words, cat_feats):
