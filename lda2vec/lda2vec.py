@@ -13,13 +13,34 @@ from embed_mixture import EmbedMixture
 from dirichlet_likelihood import dirichlet_likelihood
 
 
+def timeit(method):
+    def timed(*args, **kw):
+        ts = time.time()
+        result = method(*args, **kw)
+        te = time.time()
+        print '%2.4f sec %r' % (te - ts, method.__name__)
+        return result
+    return timed
+
+
+def _chunks(n, *args):
+    """Yield successive n-sized chunks from l."""
+    # From stackoverflow question 312443
+    keypoints = []
+    for i in xrange(0, len(args[0]), n):
+        keypoints.append((i, i + n))
+    random.shuffle(keypoints)
+    for a, b in keypoints:
+        yield [arg[a: b] for arg in args]
+
+
 class LDA2Vec(chainer.Chain):
     _loss_types = ['sigmoid_cross_entropy', 'softmax_cross_entropy',
                    'hinge', 'mean_squared_error']
     _finalized = False
     _n_partial_fits = 0
 
-    def __init__(self, n_words, n_hidden, counts, n_samples=5, grad_clip=5.0,
+    def __init__(self, n_words, n_hidden, counts, n_samples=5, grad_clip=None,
                  logging_level=0, dropout_ratio=0.2, dropout_word=0.3,
                  window=5):
         """ LDA-like model with multiple contexts and supervised labels.
@@ -81,10 +102,14 @@ class LDA2Vec(chainer.Chain):
 
     def add_categorical_feature(self, n_possible_values, n_latent_factors,
                                 covariance_penalty=None, loss_type=None,
-                                n_target_out=1, name=None):
-        """ Add a categorical feature to the context. You must add categorical_features
-        in the order in which they'll appear when `fit` is called. Optionally
-        make it a supervised feature.
+                                n_target_out=1, name=None, l2_penalty=None,
+                                logdet_penalty=None,
+                                use_predefined_feature=None):
+        """ Add a categorical feature to the context. You must add
+        categorical_features in the order in which they'll appear when `fit`
+        is called. Optionally make it a supervised feature. If you use the
+        name of a feature that has already been added, the topics will be
+        shared with that feature.
 
         Arguments
         ---------
@@ -105,9 +130,23 @@ class LDA2Vec(chainer.Chain):
         n_target_out : int
             Dimensionality of the target. If predicting a scalar output, this
             should be 1. Otherwise should be the rank of the output.
+        l2_penalty : float
+            If the categorical feature is spatially continuous, like week
+            number or latitude, this enforces that nearby points are similar.
+        logdet_penalty : None, float
+            Penalize the log determinant of the topic covariance matrix. This
+            penalizes topics that are highly correlated.
+        use_predefined_feature: None, str
+            Instead of generating a new topic space for this feature use
+            another feature's topics. This is helpful when you want the
+            document topics to be exactly the same as the temporal or user
+            topics.
         """
-        em = EmbedMixture(n_possible_values, n_latent_factors, self.n_hidden,
-                          dropout_ratio=self.dropout_ratio)
+        if use_predefined_feature is not None:
+            em = self.categorical_features[use_predefined_feature][0]
+        else:
+            em = EmbedMixture(n_possible_values, n_latent_factors,
+                              self.n_hidden, dropout_ratio=self.dropout_ratio)
         transform, loss_func = None, None
         if name is None:
             name = "categorical_feature_%0i" % (len(self.categorical_features))
@@ -123,7 +162,8 @@ class LDA2Vec(chainer.Chain):
         else:
             self.logger.info("Added categorical_feature %s" % name)
         self.categorical_features[name] = (em, transform, loss_func,
-                                           covariance_penalty)
+                                           covariance_penalty, l2_penalty,
+                                           logdet_penalty)
         counts = np.zeros(n_possible_values).astype('int32')
         self.categorical_feature_counts[name] = counts
         self.categorical_feature_names.append(name)
@@ -168,8 +208,12 @@ class LDA2Vec(chainer.Chain):
         loss_func.W.data[:] = data[:].astype('float32')
         kwargs = dict(vocab=L.EmbedID(self.n_words, self.n_hidden),
                       loss_func=loss_func)
-        for name, (em, transform, lf, cp) in self.categorical_features.items():
-            kwargs[name + '_mixture'] = em
+        added = set()
+        for name, (em, transform, lf, cp, lp, ldp) in \
+                self.categorical_features.items():
+            if name not in added:
+                kwargs[name + '_mixture'] = em
+                added.add(name)
             if transform is not None:
                 kwargs[name + '_linear'] = transform
         super(LDA2Vec, self).__init__(**kwargs)
@@ -180,8 +224,9 @@ class LDA2Vec(chainer.Chain):
     def _setup(self):
         optimizer = optimizers.Adam()
         optimizer.setup(self)
-        clip = chainer.optimizer.GradientClipping(self.grad_clip)
-        optimizer.add_hook(clip)
+        if self.grad_clip is not None:
+            clip = chainer.optimizer.GradientClipping(self.grad_clip)
+            optimizer.add_hook(clip)
         self._optimizer = optimizer
         self.logger.info("Setup optimizer")
 
@@ -199,32 +244,58 @@ class LDA2Vec(chainer.Chain):
         """ Measure likelihood of seeing topic proportions"""
         loss = None
         for cat_feat_name, vals in self.categorical_features.items():
-            embedding, transform, loss_func, penalty = vals
+            (embedding, transform, loss_func, penalty, l2_penalty,
+                logdet_penalty) = vals
             name = cat_feat_name + "_mixture"
             dl = dirichlet_likelihood(self[name].weights)
             if penalty:
                 factors = self[name].factors.W
                 cc = F.cross_covariance(factors, factors)
                 dl += cc
+            if logdet_penalty:
+                factors = self[name].factors.W
+                mean = F.sum(factors, axis=0) / factors.data.shape[0]
+                factors, mean = F.broadcast(factors, mean)
+                factors = factors - mean
+                eye = self.xp.eye(factors.data.shape[0], dtype='float32')
+                cov = F.matmul(factors, F.transpose(factors)) + Variable(eye)
+                ld = F.log(F.det(cov))
+                dl += ld * logdet_penalty
+            if l2_penalty:
+                weights = self[name].weights.W
+                top = Variable(weights.data[None, 0, :].T)
+                bot = Variable(weights.data[None, -1, :].T)
+                left = F.transpose(F.concat((top, F.transpose(weights))))
+                rght = F.transpose(F.concat((F.transpose(weights), bot)))
+                lp = F.mean_squared_error(left, rght)
+                dl += lp
             loss = dl if loss is None else dl + loss
         return loss
 
     def _loss(self, context, target, weight):
         _context = F.dropout(context, ratio=self.dropout_ratio)
         _word = F.dropout(self.vocab(target), ratio=self.dropout_ratio)
-        dot = -F.log(F.sigmoid(F.sum(_context * _word, axis=1)) + 1e-9)
+        dot = F.softplus(-F.sum(_context * _word, axis=1))
         return F.sum(dot * weight)
 
     def _neg_sample(self, context, target, weight):
         batchsize = target.data.shape[0]
-        loss = self._loss(context, target, weight)
         samples = self.loss_func.sampler.sample((self.n_samples, batchsize))
-        for sample in samples:
-            sample = Variable(self.xp.asarray(sample))
-            loss += self._loss(-context, sample, weight)
+        samples = Variable(self.xp.ravel(samples))
+        # We construct a minibatch of positive examples followed
+        # by n_samples number of negative samples
+        # Which means the first context is positive the following are negative
+        # and the weights are copied identically
+        # and the targets are first observed and then drawn from the negative
+        # sampling distribution
+        pos_neg = (context, ) + (-context,) * self.n_samples
+        contexts = F.concat(pos_neg, axis=0)
+        weights = F.concat((weight, ) * (self.n_samples + 1), axis=0)
+        targets = F.concat((target, samples), axis=0)
+        loss = self._loss(contexts, targets, weights)
         return loss
 
-    def _skipgram_flat(self, words, cat_feats, ignore_below=3):
+    def _skipgram_flat(self, words, cat_feats):
         if type(cat_feats) is not list:
             cat_feats = [cat_feats]
         window = self.window
@@ -246,12 +317,12 @@ class LDA2Vec(chainer.Chain):
                 wd = np.random.uniform(0, 1, weight.shape[0])
                 wd = (wd > self.dropout_word).astype('bool')
                 weight = np.logical_and(weight, wd)
-            weight = Variable(xp.asarray(weight * 1.0).astype('float32'))
             target = Variable(cwords[window + offset: -(window + 1) + offset])
+            weight = Variable(self.xp.asarray(weight * 1.0).astype('float32'))
             l = self._neg_sample(cntxt, target, weight)
-            loss = l if loss is None else loss + l
-        loss.backward()
-        return loss.data + 0.0
+            loss = l.data if loss is None else loss + l.data
+            l.backward()
+        return loss
 
     def _target(self, data_cat_feats, data_targets):
         """ Calculate the local losses relating individual document topic
@@ -263,7 +334,8 @@ class LDA2Vec(chainer.Chain):
         args = (data_cat_feats, self.categorical_feature_names, data_targets)
         for data_cat_feat, cat_feat_name, data_target in zip(*args):
             cat_feat = self.categorical_features[cat_feat_name]
-            embedding, transform, loss_func, penalty = cat_feat
+            (embedding, transform, loss_func, penalty, l2_penalty,
+                logdet_penalty) = cat_feat
             weights.append(embedding.proportions(data_cat_feat, softmax=True))
             if loss_func is None:
                 continue
@@ -278,14 +350,15 @@ class LDA2Vec(chainer.Chain):
             l = loss_func(output, F.reshape(data_target, shape))
             losses = l if losses is None else losses + l
         # Construct the latent vectors for all doc_ids
-        feature_values = F.concat(weights)
+        if len(weights) > 0:
+            feature_values = F.concat(weights)
         for name, (transform, loss_func, dtype) in self.target_losses.items():
             prediction = transform(feature_values)
             data_target = data_targets[name]
             l = loss_func(prediction, data_target)
             losses = l if losses is None else losses + l
         if losses is None:
-            losses = 0.0
+            losses = Variable(self.xp.asarray(0.0, dtype='float32'))
         return losses
 
     def to_var(self, c):
@@ -354,7 +427,7 @@ class LDA2Vec(chainer.Chain):
         categorical_features: int array
             Array of categorical_features that compute the context
         temperature : float, default=1.0
-            Inifinite temperature encourages all probability to spread out
+            Infinite temperature encourages all probability to spread out
             evenly, but zero temperature encourages the probability to be
             mapped to a single word.
 
@@ -455,7 +528,7 @@ class LDA2Vec(chainer.Chain):
         # Loss is composed of loss from predicting the word given context,
         # the target given the context, and the loss due to the prior
         # on the mixture embedding
-        total_loss = trget_loss * fraction + prior_loss * fraction
+        total_loss = trget_loss + prior_loss * fraction
         # Calculate back gradients
         total_loss.backward()
         # Propagate gradients
@@ -464,8 +537,8 @@ class LDA2Vec(chainer.Chain):
         t1 = time.time()
         rate = words_flat.shape[0] / (t1 - t0)
         msg = "Loss: %1.5e Prior: %1.5e Target %1.5e Rate: %1.2e wps"
-        msg = msg % (words_loss, prior_loss.data * fraction,
-                     trget_loss.data * fraction, rate)
+        msg = msg % (words_loss * fraction, prior_loss.data * fraction,
+                     trget_loss.data, rate)
         msg += " ETA: %1.1es" % ((n_itr - itr) * (t1 - t0))
         if itr is not None:
             msg += " Itr %i/%i" % (itr, n_itr)
@@ -473,7 +546,7 @@ class LDA2Vec(chainer.Chain):
         return total_loss
 
     def fit(self, words_flat, categorical_features=None, targets=None,
-            epochs=10, fraction=0.01):
+            epochs=10, fraction=None, n_chunk=None):
         """ Train the latent document-to-topic weights, topic vectors,
         and word vectors on the full dataset.
 
@@ -483,7 +556,11 @@ class LDA2Vec(chainer.Chain):
             A flattened 1D array of shape (n_observations) where each row is
             in a single document.
         fraction : float
-            Break the data into chunks of this fractional size
+            Break the data into chunks of this fractional size. Must define
+            this or the batchsize.
+        n_chunk : int
+            The size of the individual minibatches. Usually, this number is
+            increased to maximize GPU efficiency.
         categorical_features : int array
             List of arrays. Each array is aligned with `words_flat`. Each
             array details the categorical_feature a word is associated with,
@@ -496,7 +573,14 @@ class LDA2Vec(chainer.Chain):
         epochs : int
             Number of epochs to train over the whole dataset
         """
-        n_chunk = int(words_flat.shape[0] * fraction)
+        msg = "Either fraction or n_chunk must be specified"
+        assert (fraction is not None) or (n_chunk is not None), msg
+        if n_chunk is None:
+            n_chunk = int(words_flat.shape[0] * fraction)
+        if fraction is None:
+            fraction = n_chunk * 1.0 / words_flat.shape[0]
+        self.logger.info("Set chunk size to {:d}".format(n_chunk))
+        self.logger.info("Set fraction to {:1.3e}".format(fraction))
         for epoch in range(epochs):
             args = []
             if categorical_features is not None:
@@ -572,15 +656,5 @@ class LDA2Vec(chainer.Chain):
         for j, topic_to_word in enumerate(data['topic_term_dists']):
             top = np.argsort(topic_to_word)[::-1][:top_n]
             prefix = "Top words in topic %i " % j
-            print prefix + ' '.join([data['vocab'][i].strip() for i in top])
-
-
-def _chunks(n, *args):
-    """Yield successive n-sized chunks from l."""
-    # From stackoverflow question 312443
-    keypoints = []
-    for i in xrange(0, len(args[0]), n):
-        keypoints.append((i, i + n))
-    random.shuffle(keypoints)
-    for a, b in keypoints:
-        yield [arg[a: b] for arg in args]
+            print prefix + ' '.join([data['vocab'][i].strip().replace(' ', '_')
+                                    for i in top])

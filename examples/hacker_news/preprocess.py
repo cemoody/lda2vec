@@ -2,20 +2,20 @@
 # License: MIT
 
 # This example loads a large 800MB Hacker News comments dataset
-# and trains a multi-component lda2vec model on it
+# and preprocesses it. This can take a few hours, and a lot of
+# memory, so please be patient!
 
 from lda2vec import preprocess, Corpus
 import numpy as np
 import pandas as pd
 import logging
-import pickle
+import cPickle as pickle
 import os.path
 
 logging.basicConfig()
 
 max_length = 250   # Limit of 250 words per comment
-min_author_comments = 10  # Exclude authors with fewer comments
-min_story_comments = 10  # Exclude stories with fewer comments
+min_author_comments = 50  # Exclude authors with fewer comments
 nrows = None  # Number of rows of file to read; None reads in full file
 
 fn = "hacker_news_comments.csv"
@@ -38,10 +38,13 @@ for col, dtype in zip(features.columns, features.dtypes):
         features[col] = features[col].astype('int32')
 
 # Tokenize the texts
-# If this fails try running python -m spacy.en.download all --force
+# If this fails it's likely spacy. Install a recent spacy version.
+# Only the most recent versions have tokenization of noun phrases
+# I'm using SHA dfd1a1d3a24b4ef5904975268c1bbb13ae1a32ff
+# Also try running python -m spacy.en.download all --force
 texts = features.pop('comment_text').values
-tokens, vocab = preprocess.tokenize(texts, max_length, tag=False, n_threads=4,
-                                    parse=False, entity=False, merge=True)
+tokens, vocab = preprocess.tokenize(texts, max_length, n_threads=4,
+                                    merge=True)
 del texts
 
 # Make a ranked list of rare vs frequent words
@@ -54,17 +57,32 @@ corpus.finalize()
 # This builds a new compact index
 compact = corpus.to_compact(tokens)
 # Remove extremely rare words
-pruned = corpus.filter_count(compact, min_count=50)
+pruned = corpus.filter_count(compact, min_count=10)
 # Words tend to have power law frequency, so selectively
 # downsample the most prevalent words
 clean = corpus.subsample_frequent(pruned)
+print "n_words", np.unique(clean).max()
 
 # Extract numpy arrays over the fields we want covered by topics
 # Convert to categorical variables
-author_id = pd.Categorical(features['comment_author']).codes
+author_counts = features['comment_author'].value_counts()
+to_remove = author_counts[author_counts < min_author_comments].index
+mask = features['comment_author'].isin(to_remove).values
+author_name = features['comment_author'].values.copy()
+author_name[mask] = 'infrequent_author'
+features['comment_author'] = author_name
+authors = pd.Categorical(features['comment_author'])
+author_id = authors.codes
+author_name = authors.categories
 story_id = pd.Categorical(features['story_id']).codes
-# Chop dates into 100 epochs
-time_id = pd.cut(pd.Categorical(features['story_time']), 100).codes
+# Chop timestamps into days
+story_time = pd.to_datetime(features['story_time'], unit='s')
+days_since = (story_time - story_time.min()) / pd.Timedelta('1 day')
+time_id = days_since.astype('int32')
+
+print "n_authors", author_id.max()
+print "n_stories", story_id.max()
+print "n_times", time_id.max()
 
 # Extract outcome supervised features
 ranking = features['comment_ranking'].values
@@ -79,10 +97,11 @@ flattened, features_flat = corpus.compact_to_flat(pruned, *feature_arrs)
 (story_id_f, author_id_f, time_id_f, ranking_f, score_f) = features_flat
 
 # Save the data
-pickle.dump(corpus, open('corpus', 'w'))
-pickle.dump(vocab, open('vocab', 'w'))
+pickle.dump(corpus, open('corpus', 'w'), protocol=2)
+pickle.dump(vocab, open('vocab', 'w'), protocol=2)
 features.to_pickle('features.pd')
 data = dict(flattened=flattened, story_id=story_id_f, author_id=author_id_f,
-            time_id=time_id_f, ranking=ranking_f, score=score_f)
+            time_id=time_id_f, ranking=ranking_f, score=score_f,
+            author_name=author_name, author_index=author_id)
 np.savez('data', **data)
 np.save(open('tokens', 'w'), tokens)

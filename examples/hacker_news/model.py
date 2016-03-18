@@ -11,7 +11,7 @@ import pandas as pd
 import numpy as np
 import os.path
 import logging
-import pickle
+import cPickle as pickle
 
 # Optional: moving the model to the GPU makes it ~10x faster
 # set to False if you're having problems with Chainer and CUDA
@@ -45,33 +45,39 @@ n_words = flattened.max() + 1
 # (if using pretrained vectors, should match that dimensionality)
 n_hidden = 300
 # Number of topics to fit for types of stories
-n_topic_stories = 30
+n_topic_stories = 50
 # Number of topics to fit for types of authors
-n_topic_authors = 30
+n_topic_authors = 20
 # Number of topics to fit for types of days
-n_topic_times = 30
+n_topic_times = 10
 # Get the count for each key
 counts = corpus.keys_counts[:n_words]
 # Get the string representation for every compact key
 words = corpus.word_list(vocab)[:n_words]
 
+print "n_words", n_words
+print "n_stories", n_stories
+print "n_authors", n_authors
+print "n_times", n_times
+
 # Fit the model
-model = LDA2Vec(n_words, n_hidden, counts, dropout_ratio=0.2, n_samples=5)
+model = LDA2Vec(n_words, n_hidden, counts, dropout_ratio=0.5, n_samples=5)
 # We want topics over different articles, but we want those topics
 # to correlate with the article 'score'. This gives us a better idea
 # of what topics get to the top of HN
 model.add_categorical_feature(n_stories, n_topic_stories, name='story_id',
-                              loss_type='mean_squared_error', n_target_out=1)
+                              loss_type='mean_squared_error', n_target_out=1,
+                              logdet_penalty=1e-3)
 # This gives us topics over comments on HN. This lets us figure out
 # what categories of comments get ranked higher than others.
 # Note that we're assuming the loss function is still MSE,
 # even though the rank isn't really normally distributed.
-model.add_categorical_feature(n_authors, n_topic_authors, name='author_id',
-                              loss_type='mean_squared_error', n_target_out=1)
+model.add_categorical_feature(n_authors, n_topic_authors, name='author_id')
 # We have topics over different parts in the evolution of Hacker News
 # but we won't have any outcome variables for it, so don't define
-# a loss_type
-model.add_categorical_feature(n_times, n_topic_times, name='time_id')
+# a loss_type.
+# model.add_categorical_feature(n_times, n_topic_times, name='time_id',
+#                               logdet_penalty=1e-3)
 model.finalize()
 
 # Reload model if pre-existing
@@ -80,21 +86,24 @@ if os.path.exists('model.hdf5'):
     serializers.load_hdf5('model.hdf5', model)
 
 # Train the model
-cat_feats = [story_id, author_id, time_id]
-targets = [score, ranking]
+cat_feats = [story_id, author_id]
+targets = [score]
 for _ in range(200):
-    if gpu:
-        model.to_gpu()
-    model.fit(flattened, categorical_features=cat_feats, fraction=6e-5,
-              epochs=1, targets=targets)
-    serializers.save_hdf5('model.hdf5', model)
     model.to_cpu()
     model.top_words_per_topic('story_id', words)
     model.top_words_per_topic('author_id', words)
-    model.top_words_per_topic('time_id', words)
+    if gpu:
+        model.to_gpu()
+    model.fit(flattened, categorical_features=cat_feats, fraction=16e-5,
+              epochs=1, targets=targets)
+    serializers.save_hdf5('model.hdf5', model)
+
+model.to_cpu()
+model.top_words_per_topic('story_id', words)
+model.top_words_per_topic('author_id', words)
+model.top_words_per_topic('time_id', words)
 
 # Visualize the model -- look at model.ipynb to see the results
-model.to_cpu()
 for component in ['story_id', 'author_id', 'time_id']:
     topics = model.prepare_topics(component, words)
     np.savez('topics.%s.pyldavis' % component, **topics)

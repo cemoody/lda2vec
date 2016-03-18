@@ -3,14 +3,16 @@
 
 # This simple example loads the newsgroups data from sklearn
 # and train an LDA-like model on it
+import os.path
+import logging
+import pickle
 
-from lda2vec import preprocess, LDA2Vec, Corpus
 from sklearn.datasets import fetch_20newsgroups
 from chainer import serializers
 from chainer import cuda
 import numpy as np
-import os.path
-import logging
+
+from lda2vec import preprocess, LDA2Vec, Corpus
 
 # Optional: moving the model to the GPU makes it ~10x faster
 # set to False if you're having problems with Chainer and CUDA
@@ -20,31 +22,43 @@ logging.basicConfig()
 
 # Fetch data
 texts = fetch_20newsgroups(subset='train').data
-# Convert to unicode (spaCy only works with unicode)
-texts = [unicode(d) for d in texts]
 
 # Preprocess data
 max_length = 10000   # Limit of 10k words per document
-tokens, vocab = preprocess.tokenize(texts, max_length, tag=False,
-                                    parse=False, entity=False)
-corpus = Corpus()
-# Make a ranked list of rare vs frequent words
-corpus.update_word_count(tokens)
-corpus.finalize()
-# The tokenization uses spaCy indices, and so may have gaps
-# between indices for words that aren't present in our dataset.
-# This builds a new compact index
-compact = corpus.to_compact(tokens)
-# Remove extremely rare words
-pruned = corpus.filter_count(compact, min_count=50)
-# Words tend to have power law frequency, so selectively
-# downsample the most prevalent words
-clean = corpus.subsample_frequent(pruned)
-# Now flatten a 2D array of document per row and word position
-# per column to a 1D array of words. This will also remove skips
-# and OoV words
-doc_ids = np.arange(pruned.shape[0])
-flattened, (doc_ids,) = corpus.compact_to_flat(pruned, doc_ids)
+if not os.path.exists('doc_ids.npy'):
+    # Convert to unicode (spaCy only works with unicode)
+    texts = [unicode(d) for d in texts]
+    tokens, vocab = preprocess.tokenize(texts, max_length, merge=True,
+                                        n_threads=4)
+    corpus = Corpus()
+    # Make a ranked list of rare vs frequent words
+    corpus.update_word_count(tokens)
+    corpus.finalize()
+    # The tokenization uses spaCy indices, and so may have gaps
+    # between indices for words that aren't present in our dataset.
+    # This builds a new compact index
+    compact = corpus.to_compact(tokens)
+    # Remove extremely rare words
+    pruned = corpus.filter_count(compact, min_count=30)
+    # Words tend to have power law frequency, so selectively
+    # downsample the most prevalent words
+    clean = corpus.subsample_frequent(pruned)
+    # Now flatten a 2D array of document per row and word position
+    # per column to a 1D array of words. This will also remove skips
+    # and OoV words
+    doc_ids = np.arange(pruned.shape[0])
+    flattened, (doc_ids,) = corpus.compact_to_flat(pruned, doc_ids)
+    # Save all of the preprocessed files
+    pickle.dump(vocab, open('vocab.pkl', 'w'))
+    pickle.dump(corpus, open('corpus.pkl', 'w'))
+    np.save("flattened", flattened)
+    np.save("doc_ids", doc_ids)
+else:
+    vocab = pickle.load(open('vocab.pkl', 'r'))
+    corpus = pickle.load(open('corpus.pkl', 'r'))
+    flattened = np.load("flattened.npy")
+    doc_ids = np.load("doc_ids.npy")
+
 # Optionally, we can initialize our word vectors from a pretrained
 # model. This helps when our corpus is small and we'd like to bootstrap
 word_vectors = corpus.compact_word_vectors(vocab)
@@ -72,13 +86,14 @@ model.finalize()
 # Optional: we can use the pretrained word vectors
 model.vocab.W.data[:, :] = word_vectors[:, :]
 if os.path.exists('model.hdf5'):
+    print "Reloading from previously saved model"
     serializers.load_hdf5('model.hdf5', model)
 for _ in range(200):
     model.top_words_per_topic('document_id', words)
     if gpu:
         model.to_gpu()
-    model.fit(flattened, categorical_features=[doc_ids], fraction=1e-3,
-              epochs=1)
+    model.fit(flattened, categorical_features=[doc_ids], fraction=8e-3,
+              epochs=3)
     serializers.save_hdf5('model.hdf5', model)
     model.to_cpu()
 model.top_words_per_topic('document_id', words)
