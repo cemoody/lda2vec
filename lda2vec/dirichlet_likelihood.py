@@ -27,8 +27,8 @@ def dirichlet_likelihood(weights, alpha=None):
     if alpha is None:
         alpha = 1.0 / n_topics
     if type(weights) is Variable:
-        proportions = F.softmax(weights)
+        log_proportions = F.log_softmax(weights)
     else:
-        proportions = F.softmax(weights.W)
-    loss = (alpha - 1.0) * F.log(proportions + 1e-8)
+        log_proportions = F.log_softmax(weights.W)
+    loss = (alpha - 1.0) * log_proportions
     return -F.sum(loss)
