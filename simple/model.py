@@ -71,8 +71,8 @@ n_vocab = flattened.max() + 1
 # (if using pretrained vectors, should match that dimensionality)
 n_units = 256
 # Number of topics to fit
-n_topics = 20
-batchsize = 2048
+n_topics = 32
+batchsize = 4096
 counts = corpus.keys_counts[:n_vocab]
 # Get the string representation for every compact key
 words = corpus.word_list(vocab)[:n_vocab]

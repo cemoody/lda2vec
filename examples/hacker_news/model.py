@@ -101,7 +101,6 @@ for _ in range(200):
 model.to_cpu()
 model.top_words_per_topic('story_id', words)
 model.top_words_per_topic('author_id', words)
-model.top_words_per_topic('time_id', words)
 
 # Visualize the model -- look at model.ipynb to see the results
 for component in ['story_id', 'author_id', 'time_id']:
