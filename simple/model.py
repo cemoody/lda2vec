@@ -72,15 +72,17 @@ n_vocab = flattened.max() + 1
 n_units = 256
 # Number of topics to fit
 n_topics = 32
-batchsize = 4096
+batchsize = 4096 + 1024
 counts = corpus.keys_counts[:n_vocab]
 # Get the string representation for every compact key
 words = corpus.word_list(vocab)[:n_vocab]
 word_vectors = word_vectors[:n_vocab]
 
 model = SimpleLDA2Vec(n_documents=n_docs, n_document_topics=n_topics,
-                      n_units=n_units, n_vocab=n_vocab, loss_type='neg_sample',
-                      counts=counts)
+                      n_units=n_units, n_vocab=n_vocab, counts=counts)
+if os.path.exists('model.hdf5'):
+    print "Reloading from saved"
+    serializers.load_hdf5("model.hdf5", model)
 model.to_gpu()
 optimizer = O.Adam()
 optimizer.setup(model)
@@ -107,7 +109,7 @@ for epoch in range(100):
         optimizer.zero_grads()
         loss.backward()
         optimizer.update()
-        msg = ("J:{j:05d} E:{epoch:05d} L:{loss:1.3f} "
+        msg = ("J:{j:05d} E:{epoch:05d} L:{loss:1.3e} "
                "P:{prior:1.3e} R:{rate:1.3e}")
         prior.to_cpu()
         loss.to_cpu()
@@ -118,15 +120,14 @@ for epoch in range(100):
                     prior=float(prior.data), rate=rate)
         print msg.format(**logs)
         j += 1
-        if j % 100 == 0:
-            model.to_cpu()
-            for aidx in range(500, 2500, 100):
-                sims = model.most_similar(aidx)[::-1]
-                ans = vocab.get(corpus.compact_to_loose.get(aidx, None), ' ')
-                print ans.strip() + ': ',
-                for idx in np.argsort(sims)[::-1][1: 10]:
-                    r = vocab.get(corpus.compact_to_loose.get(idx, None), ' ')
-                    print (r[:15].strip().replace('\n', '') + " "),
-                print ""
-            model.to_gpu()
-    serializers.save_hdf5("model", model)
+    model.to_cpu()
+    for aidx in np.random.choice(np.arange(5000), 10):
+        sims = model.most_similar(aidx)[::-1]
+        ans = vocab.get(corpus.compact_to_loose.get(aidx, None), ' ')
+        print ans.strip() + ': ',
+        for idx in np.argsort(sims)[::-1][1: 10]:
+            r = vocab.get(corpus.compact_to_loose.get(idx, None), ' ')
+            print (r[:15].strip().replace('\n', '') + " "),
+        print ""
+    serializers.save_hdf5("model.hdf5", model)
+    model.to_gpu()
