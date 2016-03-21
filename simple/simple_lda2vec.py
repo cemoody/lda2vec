@@ -16,9 +16,9 @@ class SimpleLDA2Vec(Chain):
         kwargs = {}
         em = EmbedMixture(n_documents, n_document_topics, n_units,
                           dropout_ratio=dropout_ratio)
-        kwargs['mixture1'] = em
-        kwargs['sampler'] = L.NegativeSampling(n_units, counts, n_samples)
+        kwargs['mixture'] = em
         kwargs['embed'] = L.EmbedID(n_vocab, n_units)
+        kwargs['sampler'] = L.NegativeSampling(n_units, counts, n_samples)
         super(SimpleLDA2Vec, self).__init__(**kwargs)
         self.n_units = n_units
         self.train = train
@@ -38,18 +38,17 @@ class SimpleLDA2Vec(Chain):
         return dl1
 
     def fit_pivot(self, rdoc_ids, rword_indices, window=5):
-        # From empty token but document-initialized state predict 1st tokenA
         n_frames = 2 * window
         doc_ids, word_indices = self.move(rdoc_ids, rword_indices)
         pivot = self.embed(next(self.move(rword_indices[window: -window])))
         context_at_pivot = rdoc_ids[window: -window]
-        context = self.mixture1(next(self.move(context_at_pivot)))
+        context = self.mixture(next(self.move(context_at_pivot)))
+        loss = 0.0
         start, end = window, rword_indices.shape[0] - window
         combined = (F.dropout(context, self.dropout_ratio) +
                     F.dropout(pivot, self.dropout_ratio))
         combineds = F.concat((combined, ) * n_frames, axis=0)
         targets = []
-        weights = []
         for frame in range(-window, window + 1):
             # Skip predicting the current pivot
             if frame == 0:
@@ -59,33 +58,11 @@ class SimpleLDA2Vec(Chain):
             targetidx = rword_indices[start + frame: end + frame]
             context_at_target = rdoc_ids[start + frame: end + frame]
             context_same = context_at_target == context_at_pivot
+            targetidx[~context_same] = -1
             target, = self.move(targetidx)
             targets.append(target)
-            weight, = self.move(context_same.astype('float32'))
-            weights.append(weight)
         targets = F.concat(targets, axis=0)
-        weights = F.concat(weights, axis=0)
-        loss = self.neg_sample(combineds, targets, weights)
-        return loss
-
-    def neg_sample(self, combined, target, weight):
-        batchsize = target.data.shape[0]
-        # Draw negative sample word indices
-        samples = self.sampler.sampler.sample((self.n_samples, batchsize))
-        samples = Variable(self.xp.ravel(samples))
-        # Negate the negatively-sampled contexts
-        pos_neg = (combined, ) + (-combined,) * self.n_samples
-        contexts = F.concat(pos_neg, axis=0)
-        # Regardless of pos/neg, ignore the same set of observations
-        weights = F.concat((weight, ) * (self.n_samples + 1), axis=0)
-        # Get word vectors for all targets
-        targets = F.concat((target, samples), axis=0)
-        target_vectors = F.dropout(self.embed(targets), self.dropout_ratio)
-        # Calculate the sigmoid loss
-        inner = F.sum(contexts * target_vectors, axis=1)
-        # The softplus is equivalent to -log(sigmoid(x))
-        # import pdb; pdb.set_trace()
-        loss = F.sum(F.softplus(-inner) * weights)
+        loss = self.sampler(combineds, targets)
         return loss
 
     def most_similar(self, word_index):
