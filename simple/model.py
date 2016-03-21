@@ -79,8 +79,7 @@ words = corpus.word_list(vocab)[:n_vocab]
 word_vectors = word_vectors[:n_vocab]
 
 model = SimpleLDA2Vec(n_documents=n_docs, n_document_topics=n_topics,
-                      n_units=n_units, n_vocab=n_vocab, loss_type='neg_sample',
-                      counts=counts)
+                      n_units=n_units, n_vocab=n_vocab, counts=counts)
 model.to_gpu()
 optimizer = O.Adam()
 optimizer.setup(model)
