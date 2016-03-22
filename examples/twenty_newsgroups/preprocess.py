@@ -37,6 +37,8 @@ corpus.finalize()
 compact = corpus.to_compact(tokens)
 # Remove extremely rare words
 pruned = corpus.filter_count(compact, min_count=15)
+# Convert the compactified arrays into bag of words arrays
+bow = corpus.compact_to_bow(pruned)
 # Words tend to have power law frequency, so selectively
 # downsample the most prevalent words
 clean = corpus.subsample_frequent(pruned)
@@ -50,3 +52,5 @@ pickle.dump(vocab, open('vocab.pkl', 'w'))
 pickle.dump(corpus, open('corpus.pkl', 'w'))
 np.save("flattened", flattened)
 np.save("doc_ids", doc_ids)
+np.save("pruned", pruned)
+np.save("bow", bow)

@@ -13,16 +13,12 @@ import numpy as np
 
 from lda2vec import utils
 from lda2vec import prepare_topics, print_top_words_per_topic
-from simple_lda2vec import LDA2Vec
+from lda2vec_model import LDA2Vec
 
 vocab = pickle.load(open('vocab.pkl', 'r'))
 corpus = pickle.load(open('corpus.pkl', 'r'))
 flattened = np.load("flattened.npy")
 doc_ids = np.load("doc_ids.npy")
-
-# Optionally, we can initialize our word vectors from a pretrained
-# model. This helps when our corpus is small and we'd like to bootstrap
-word_vectors = corpus.compact_word_vectors(vocab)
 
 # Model Parameters
 # Number of documents
@@ -39,14 +35,13 @@ batchsize = 4096 * 4
 counts = corpus.keys_counts[:n_vocab]
 # Get the string representation for every compact key
 words = corpus.word_list(vocab)[:n_vocab]
-word_vectors = word_vectors[:n_vocab]
 
 model = LDA2Vec(n_documents=n_docs, n_document_topics=n_topics,
                 n_units=n_units, n_vocab=n_vocab, counts=counts,
                 n_samples=15)
-if os.path.exists('model.hdf5'):
+if os.path.exists('lda2vec.hdf5'):
     print "Reloading from saved"
-    serializers.load_hdf5("model.hdf5", model)
+    serializers.load_hdf5("lda2vec.hdf5", model)
 model.to_gpu()
 optimizer = O.Adam()
 optimizer.setup(model)
@@ -80,4 +75,4 @@ for epoch in range(500):
                     prior=float(prior.data), rate=rate)
         print msg.format(**logs)
         j += 1
-    serializers.save_hdf5("model.hdf5", model)
+    serializers.save_hdf5("lda2vec.hdf5", model)
