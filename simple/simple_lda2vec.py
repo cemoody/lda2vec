@@ -7,9 +7,9 @@ import chainer.links as L
 import chainer.functions as F
 
 
-class SimpleLDA2Vec(Chain):
+class LDA2Vec(Chain):
     def __init__(self, n_documents=100, n_document_topics=10,
-                 n_units=256, n_vocab=1000, dropout_ratio=0.5, train=True,
+                 n_units=256, n_vocab=1000, dropout_ratio=0.0, train=True,
                  counts=None, n_samples=15):
         em = EmbedMixture(n_documents, n_document_topics, n_units,
                           dropout_ratio=dropout_ratio)
@@ -17,7 +17,7 @@ class SimpleLDA2Vec(Chain):
         kwargs['mixture'] = em
         kwargs['embed'] = L.EmbedID(n_vocab, n_units)
         kwargs['sampler'] = L.NegativeSampling(n_units, counts, n_samples)
-        super(SimpleLDA2Vec, self).__init__(**kwargs)
+        super(LDA2Vec, self).__init__(**kwargs)
         self.n_units = n_units
         self.train = train
         self.dropout_ratio = dropout_ratio

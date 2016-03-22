@@ -15,7 +15,7 @@ import numpy as np
 
 from lda2vec import preprocess, Corpus, utils
 from lda2vec import prepare_topics, print_top_words_per_topic
-from simple_lda2vec import SimpleLDA2Vec
+from simple_lda2vec import LDA2Vec
 
 logging.basicConfig()
 
@@ -76,6 +76,8 @@ n_vocab = flattened.max() + 1
 # Number of dimensions in a single word vector
 # (if using pretrained vectors, should match that dimensionality)
 n_units = 256
+# 'Strength' of the dircihlet prior; 200.0 seems to work well
+clambda = 200.0
 # Number of topics to fit
 n_topics = 32
 batchsize = 4096 * 4
@@ -84,9 +86,9 @@ counts = corpus.keys_counts[:n_vocab]
 words = corpus.word_list(vocab)[:n_vocab]
 word_vectors = word_vectors[:n_vocab]
 
-model = SimpleLDA2Vec(n_documents=n_docs, n_document_topics=n_topics,
-                      n_units=n_units, n_vocab=n_vocab, counts=counts,
-                      n_samples=15)
+model = LDA2Vec(n_documents=n_docs, n_document_topics=n_topics,
+                n_units=n_units, n_vocab=n_vocab, counts=counts,
+                n_samples=15)
 if os.path.exists('model.hdf5'):
     print "Reloading from saved"
     serializers.load_hdf5("model.hdf5", model)
@@ -108,7 +110,7 @@ for epoch in range(500):
         t0 = time.time()
         l = model.fit_partial(d, f)
         prior = model.prior()
-        loss = l + prior  # * fraction
+        loss = l + prior * fraction * clambda
         optimizer.zero_grads()
         loss.backward()
         optimizer.update()
