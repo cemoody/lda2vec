@@ -35,7 +35,7 @@ class NVDM(chainer.Chain):
         e = self.xp.random.normal(size=(batchsize, self.n_dim))
         h = mu + F.exp(0.5 * log_sigma) * e
         log_prob = self.embedding(h)
-        log_prob_repeat = self.concat((log_prob, ) * n_repeat)
+        log_prob_repeat = F.concat((log_prob, ) * n_repeat, axis=0)
         loss_rec = F.softmax_cross_entropy(log_prob_repeat, word_compact)
         loss_kl = F.gaussian_kl_divergence(mu, log_sigma)
         return loss_rec, loss_kl
