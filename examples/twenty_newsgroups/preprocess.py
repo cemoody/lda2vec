@@ -36,7 +36,7 @@ corpus.finalize()
 # This builds a new compact index
 compact = corpus.to_compact(tokens)
 # Remove extremely rare words
-pruned = corpus.filter_count(compact, min_count=15)
+pruned = corpus.filter_count(compact, min_count=30)
 # Convert the compactified arrays into bag of words arrays
 bow = corpus.compact_to_bow(pruned)
 # Words tend to have power law frequency, so selectively

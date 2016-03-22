@@ -27,12 +27,13 @@ bow[:, :2] = 0
 n_vocab = pruned.max() + 1
 # Number of dimensions in a single word vector
 n_units = 256
-batchsize = 160
+batchsize = 176
+n_topics = 20
 counts = corpus.keys_counts[:n_vocab]
 # Get the string representation for every compact key
 words = corpus.word_list(vocab)[:n_vocab]
 
-model = NVDM(n_vocab, n_units)
+model = NVDM(n_vocab, n_topics, n_units)
 if os.path.exists('nvdm.hdf5'):
     print "Reloading from saved"
     serializers.load_hdf5("nvdm.hdf5", model)
@@ -49,19 +50,19 @@ for epoch in range(500):
                 continue
             t0 = time.time()
             flattened = chunk.T.flatten()
-            rec, kl = model.fit(b, flattened)
+            rec, kl, dl = model.fit(b, flattened)
             optimizer.zero_grads()
-            l = rec + kl
+            l = rec + kl + dl
             l.backward()
             optimizer.update()
             msg = ("J:{j:05d} E:{epoch:05d} L:{loss:1.3e} "
-                   "P:{prior:1.3e} R:{rate:1.3e}")
+                   "P:{prior:1.3e} DL:{dl:1.3e} R:{rate:1.3e}")
             l.to_cpu()
             t1 = time.time()
             dt = t1 - t0
             rate = batchsize / dt
             logs = dict(loss=float(rec.data), epoch=epoch, j=j,
-                        prior=float(kl.data), rate=rate)
+                        prior=float(kl.data), rate=rate, dl=float(dl.data))
             print msg.format(**logs)
             j += 1
     serializers.save_hdf5("nvdm.hdf5", model)

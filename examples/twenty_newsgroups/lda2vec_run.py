@@ -60,7 +60,7 @@ for epoch in range(500):
         t0 = time.time()
         l = model.fit_partial(d, f)
         prior = model.prior()
-        loss = l + prior * fraction * clambda
+        loss = l + prior * fraction
         optimizer.zero_grads()
         loss.backward()
         optimizer.update()
