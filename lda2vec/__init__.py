@@ -8,7 +8,6 @@ import topics
 
 dirichlet_likelihood = dirichlet_likelihood.dirichlet_likelihood
 EmbedMixture = embed_mixture.EmbedMixture
-LDA2Vec = lda2vec.LDA2Vec
 Tracking = tracking.Tracking
 tokenize = preprocess.tokenize
 Corpus = corpus.Corpus

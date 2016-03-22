@@ -4,65 +4,21 @@
 # This simple example loads the newsgroups data from sklearn
 # and train an LDA-like model on it
 import os.path
-import logging
 import pickle
 import time
 
-from sklearn.datasets import fetch_20newsgroups
 from chainer import serializers
 import chainer.optimizers as O
 import numpy as np
 
-from lda2vec import preprocess, Corpus, utils
+from lda2vec import utils
 from lda2vec import prepare_topics, print_top_words_per_topic
 from simple_lda2vec import LDA2Vec
 
-logging.basicConfig()
-
-# Fetch data
-removes = ('header', 'footer', 'quotes')
-texts = fetch_20newsgroups(subset='train', remove=removes).data
-
-
-def replace(t):
-    sep = "max>'ax>'ax>'ax>'ax>'ax>'ax>'ax>'ax>'ax>'ax>'ax>'ax>'ax>'ax"
-    return t.replace('`@("', '').replace("'ax>", '').replace(sep, '')
-
-# Preprocess data
-max_length = 10000   # Limit of 10k words per document
-if not os.path.exists('doc_ids.npy'):
-    # Convert to unicode (spaCy only works with unicode)
-    texts = [unicode(replace(d)) for d in texts]
-    tokens, vocab = preprocess.tokenize(texts, max_length, merge=True,
-                                        n_threads=4)
-    corpus = Corpus()
-    # Make a ranked list of rare vs frequent words
-    corpus.update_word_count(tokens)
-    corpus.finalize()
-    # The tokenization uses spaCy indices, and so may have gaps
-    # between indices for words that aren't present in our dataset.
-    # This builds a new compact index
-    compact = corpus.to_compact(tokens)
-    # Remove extremely rare words
-    pruned = corpus.filter_count(compact, min_count=15)
-    # Words tend to have power law frequency, so selectively
-    # downsample the most prevalent words
-    clean = corpus.subsample_frequent(pruned)
-    # Now flatten a 2D array of document per row and word position
-    # per column to a 1D array of words. This will also remove skips
-    # and OoV words
-    doc_ids = np.arange(pruned.shape[0])
-    flattened, (doc_ids,) = corpus.compact_to_flat(pruned, doc_ids)
-    # Save all of the preprocessed files
-    pickle.dump(vocab, open('vocab.pkl', 'w'))
-    pickle.dump(corpus, open('corpus.pkl', 'w'))
-    np.save("flattened", flattened)
-    np.save("doc_ids", doc_ids)
-else:
-    vocab = pickle.load(open('vocab.pkl', 'r'))
-    corpus = pickle.load(open('corpus.pkl', 'r'))
-    flattened = np.load("flattened.npy")
-    doc_ids = np.load("doc_ids.npy")
+vocab = pickle.load(open('vocab.pkl', 'r'))
+corpus = pickle.load(open('corpus.pkl', 'r'))
+flattened = np.load("flattened.npy")
+doc_ids = np.load("doc_ids.npy")
 
 # Optionally, we can initialize our word vectors from a pretrained
 # model. This helps when our corpus is small and we'd like to bootstrap
@@ -70,11 +26,10 @@ word_vectors = corpus.compact_word_vectors(vocab)
 
 # Model Parameters
 # Number of documents
-n_docs = len(texts)
+n_docs = doc_ids.max() + 1
 # Number of unique words in the vocabulary
 n_vocab = flattened.max() + 1
 # Number of dimensions in a single word vector
-# (if using pretrained vectors, should match that dimensionality)
 n_units = 256
 # 'Strength' of the dircihlet prior; 200.0 seems to work well
 clambda = 200.0
