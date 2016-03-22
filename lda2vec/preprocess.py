@@ -1,5 +1,5 @@
 from spacy.en import English
-from spacy.attrs import LOWER, LIKE_URL, LIKE_EMAIL
+from spacy.attrs import LOWER, LIKE_URL, LIKE_EMAIL, IS_ALPHA
 
 import numpy as np
 
@@ -86,7 +86,8 @@ def tokenize(texts, max_length, skip=-2, attr=LOWER, merge=False, nlp=None,
                     if len(ent) > 1:
                         # Merge them into single tokens
                         ent.merge(ent.root.tag_, ent.text, ent.label_)
-        dat = doc.to_array([attr, LIKE_EMAIL, LIKE_URL]).astype('int32')
+        dat = doc.to_array([attr, LIKE_EMAIL, LIKE_URL, IS_ALPHA])
+        dat = dat.astype('int32')
         msg = "Negative indices reserved for special tokens"
         assert dat.min() >= 0, msg
         # Replace email and URL tokens

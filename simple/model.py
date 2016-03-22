@@ -6,7 +6,6 @@
 import os.path
 import logging
 import pickle
-import random
 import time
 
 from sklearn.datasets import fetch_20newsgroups
@@ -14,19 +13,26 @@ from chainer import serializers
 import chainer.optimizers as O
 import numpy as np
 
-from lda2vec import preprocess, Corpus
+from lda2vec import preprocess, Corpus, utils
+from lda2vec import prepare_topics, print_top_words_per_topic
 from simple_lda2vec import SimpleLDA2Vec
 
 logging.basicConfig()
 
 # Fetch data
-texts = fetch_20newsgroups(subset='train').data
+removes = ('header', 'footer', 'quotes')
+texts = fetch_20newsgroups(subset='train', remove=removes).data
+
+
+def replace(t):
+    sep = "max>'ax>'ax>'ax>'ax>'ax>'ax>'ax>'ax>'ax>'ax>'ax>'ax>'ax>'ax"
+    return t.replace('`@("', '').replace("'ax>", '').replace(sep, '')
 
 # Preprocess data
 max_length = 10000   # Limit of 10k words per document
 if not os.path.exists('doc_ids.npy'):
     # Convert to unicode (spaCy only works with unicode)
-    texts = [unicode(d) for d in texts]
+    texts = [unicode(replace(d)) for d in texts]
     tokens, vocab = preprocess.tokenize(texts, max_length, merge=True,
                                         n_threads=4)
     corpus = Corpus()
@@ -38,7 +44,7 @@ if not os.path.exists('doc_ids.npy'):
     # This builds a new compact index
     compact = corpus.to_compact(tokens)
     # Remove extremely rare words
-    pruned = corpus.filter_count(compact, min_count=30)
+    pruned = corpus.filter_count(compact, min_count=15)
     # Words tend to have power law frequency, so selectively
     # downsample the most prevalent words
     clean = corpus.subsample_frequent(pruned)
@@ -72,14 +78,15 @@ n_vocab = flattened.max() + 1
 n_units = 256
 # Number of topics to fit
 n_topics = 32
-batchsize = 4096 + 1024
+batchsize = 4096 * 4
 counts = corpus.keys_counts[:n_vocab]
 # Get the string representation for every compact key
 words = corpus.word_list(vocab)[:n_vocab]
 word_vectors = word_vectors[:n_vocab]
 
 model = SimpleLDA2Vec(n_documents=n_docs, n_document_topics=n_topics,
-                      n_units=n_units, n_vocab=n_vocab, counts=counts)
+                      n_units=n_units, n_vocab=n_vocab, counts=counts,
+                      n_samples=15)
 if os.path.exists('model.hdf5'):
     print "Reloading from saved"
     serializers.load_hdf5("model.hdf5", model)
@@ -87,25 +94,21 @@ model.to_gpu()
 optimizer = O.Adam()
 optimizer.setup(model)
 
-
-def chunks(n, *args):
-    """Yield successive n-sized chunks from l."""
-    # From stackoverflow question 312443
-    keypoints = []
-    for i in xrange(0, len(args[0]), n):
-        keypoints.append((i, i + n))
-    random.shuffle(keypoints)
-    for a, b in keypoints:
-        yield [arg[a: b] for arg in args]
-
 j = 0
 fraction = batchsize * 1.0 / flattened.shape[0]
-for epoch in range(100):
-    for d, f in chunks(batchsize, doc_ids, flattened):
+for epoch in range(500):
+    model.to_cpu()
+    data = prepare_topics(model.mixture.weights.W.data.copy(),
+                          model.mixture.factors.W.data.copy(),
+                          model.embed.W.data.copy(),
+                          words)
+    print_top_words_per_topic(data)
+    model.to_gpu()
+    for d, f in utils.chunks(batchsize, doc_ids, flattened):
         t0 = time.time()
-        loss = model.fit_pivot(d, f)
+        l = model.fit_partial(d, f)
         prior = model.prior()
-        loss += prior * fraction
+        loss = l + prior  # * fraction
         optimizer.zero_grads()
         loss.backward()
         optimizer.update()
@@ -116,18 +119,8 @@ for epoch in range(100):
         t1 = time.time()
         dt = t1 - t0
         rate = batchsize / dt
-        logs = dict(loss=float(loss.data), epoch=epoch, j=j,
+        logs = dict(loss=float(l.data), epoch=epoch, j=j,
                     prior=float(prior.data), rate=rate)
         print msg.format(**logs)
         j += 1
-    model.to_cpu()
-    for aidx in np.random.choice(np.arange(5000), 10):
-        sims = model.most_similar(aidx)[::-1]
-        ans = vocab.get(corpus.compact_to_loose.get(aidx, None), ' ')
-        print ans.strip() + ': ',
-        for idx in np.argsort(sims)[::-1][1: 10]:
-            r = vocab.get(corpus.compact_to_loose.get(idx, None), ' ')
-            print (r[:15].strip().replace('\n', '') + " "),
-        print ""
     serializers.save_hdf5("model.hdf5", model)
-    model.to_gpu()
