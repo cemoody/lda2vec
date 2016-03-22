@@ -29,11 +29,14 @@ class NVDM(chainer.Chain):
         """ Decode latent document vectors into word indices of shape
         (n_docs, doc_length).
         """
-        batchsize = word_compact.shape[0]
+        trgetsize = word_compact.data.shape[0]
+        batchsize = mu.data.shape[0]
+        n_repeat = trgetsize / batchsize
         e = self.xp.random.normal(size=(batchsize, self.n_dim))
         h = mu + F.exp(0.5 * log_sigma) * e
         log_prob = self.embedding(h)
-        loss_rec = F.softmax_cross_entropy(log_prob, word_compact)
+        log_prob_repeat = self.concat((log_prob, ) * n_repeat)
+        loss_rec = F.softmax_cross_entropy(log_prob_repeat, word_compact)
         loss_kl = F.gaussian_kl_divergence(mu, log_sigma)
         return loss_rec, loss_kl
 

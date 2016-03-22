@@ -18,13 +18,16 @@ vocab = pickle.load(open('vocab.pkl', 'r'))
 corpus = pickle.load(open('corpus.pkl', 'r'))
 pruned = np.load("pruned.npy")
 bow = np.load("bow.npy")
+# Set the <SKIP> tokens to -1, which will be ignored in the loss function
+pruned[pruned == 0] = -1
+# Remove bow counts on the first two tokens, which <SKIP> and <EOS>
+bow[:, :2] = 0
 
-# Model Parameters
 # Number of unique words in the vocabulary
 n_vocab = pruned.max() + 1
 # Number of dimensions in a single word vector
 n_units = 256
-batchsize = 128
+batchsize = 8
 counts = corpus.keys_counts[:n_vocab]
 # Get the string representation for every compact key
 words = corpus.word_list(vocab)[:n_vocab]
@@ -42,7 +45,8 @@ fraction = batchsize * 1.0 / pruned.shape[0]
 for epoch in range(500):
     for b, p in utils.chunks(batchsize, bow, pruned):
         t0 = time.time()
-        rec, kl = model.fit(b, p)
+        flattened = p.flatten()
+        rec, kl = model.fit(b, flattened)
         optimizer.zero_grads()
         l = rec + kl
         l.backward()
