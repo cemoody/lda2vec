@@ -566,13 +566,19 @@ class Corpus():
         25
         >>> v.sum()
         50
+        >>> words = [[0, 0, 0, 3, 4], [1, 1, 1, 4, 5]]
+        >>> words = np.array(words)
+        >>> bow = corpus.compact_to_bow(words)
+        >>> bow.shape
+        (2, 6)
         """
         if max_compact_index is None:
             max_compact_index = word_compact.max()
 
         def bincount(x):
             return np.bincount(x, minlength=max_compact_index + 1)
-        bow = np.apply_along_axis(bincount, 0, word_compact)
+        axis = len(word_compact.shape) - 1
+        bow = np.apply_along_axis(bincount, axis, word_compact)
         return bow
 
 
