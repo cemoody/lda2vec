@@ -541,6 +541,46 @@ class Corpus():
             data[compact, :] = vector[:]
         return data
 
+    def compact_to_bow(self, word_compact, max_compact_index=None):
+        """ Given a 2D array of compact indices, return the bag of words
+        representation where the column is the word index, row is the document
+        index, and the value is the number of times that word appears in that
+        document.
+
+        >>> import numpy.linalg as nl
+        >>> vocab = {19: 'shuttle', 5: 'astronomy', 7: 'cold', 3: 'hot'}
+        >>> word_indices = np.zeros(50).astype('int32')
+        >>> word_indices[:25] = 19  # 'Shuttle' shows 25 times
+        >>> word_indices[25:35] = 5  # 'astronomy' is in 10 times
+        >>> word_indices[40:46] = 7  # 'cold' is in 6 times
+        >>> word_indices[46:] = 3  # 'hot' is in 3 times
+        >>> corpus = Corpus()
+        >>> corpus.update_word_count(word_indices)
+        >>> corpus.finalize()
+        >>> v = corpus.compact_to_bow(word_indices)
+        >>> len(v)
+        20
+        >>> v[:6]
+        array([ 5,  0,  0,  4,  0, 10])
+        >>> v[19]
+        25
+        >>> v.sum()
+        50
+        >>> words = [[0, 0, 0, 3, 4], [1, 1, 1, 4, 5]]
+        >>> words = np.array(words)
+        >>> bow = corpus.compact_to_bow(words)
+        >>> bow.shape
+        (2, 6)
+        """
+        if max_compact_index is None:
+            max_compact_index = word_compact.max()
+
+        def bincount(x):
+            return np.bincount(x, minlength=max_compact_index + 1)
+        axis = len(word_compact.shape) - 1
+        bow = np.apply_along_axis(bincount, axis, word_compact)
+        return bow
+
 
 def fast_replace(data, keys, values, skip_checks=False):
     """ Do a search-and-replace in array `data`.
