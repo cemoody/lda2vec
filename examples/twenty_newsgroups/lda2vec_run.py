@@ -36,7 +36,7 @@ n_units = 256
 clambda = 200.0
 # Number of topics to fit
 n_topics = 32
-batchsize = 4096 * 12
+batchsize = 4096
 counts = corpus.keys_counts[:n_vocab]
 # Get the string representation for every compact key
 words = corpus.word_list(vocab)[:n_vocab]

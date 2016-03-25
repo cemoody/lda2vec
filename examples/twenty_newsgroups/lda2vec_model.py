@@ -27,22 +27,21 @@ class LDA2Vec(Chain):
         dl1 = dirichlet_likelihood(self.mixture.weights)
         return dl1
 
-    def loss(self, c, t, w):
-        word = F.dropout(self.embed(t), ratio=self.dropout_ratio)
-        dot = -F.log(F.sigmoid(F.sum(c * word, axis=1)) + 1e-9)
-        return F.sum(dot * w)
+    def loss(self, source, target, weight):
+        word = F.dropout(self.embed(target), ratio=self.dropout_ratio)
+        dot = -F.log(F.sigmoid(F.sum(source * word, axis=1)) + 1e-9)
+        return F.sum(dot * weight)
 
     def fit_partial(self, rdoc_ids, rword_indices, window=5):
-        n_frames = 2 * window
         doc_ids, word_indices = move(self.xp, rdoc_ids, rword_indices)
         pivot = self.embed(next(move(self.xp, rword_indices[window: -window])))
-        context_at_pivot = rdoc_ids[window: -window]
-        context = self.mixture(next(move(self.xp, context_at_pivot)))
+        doc_at_pivot = rdoc_ids[window: -window]
+        doc = self.mixture(next(move(self.xp, doc_at_pivot)))
         loss = 0.0
         start, end = window, rword_indices.shape[0] - window
-        combined = (F.dropout(context, self.dropout_ratio) +
-                    F.dropout(pivot, self.dropout_ratio))
-        combineds = F.concat((combined, ) * n_frames, axis=0)
+        context = (F.dropout(doc, self.dropout_ratio) +
+                   F.dropout(pivot, self.dropout_ratio))
+        sources = []
         targets = []
         weights = []
         for frame in range(-window, window + 1):
@@ -52,14 +51,24 @@ class LDA2Vec(Chain):
             # Predict word given context and pivot word
             # The target starts before the pivot
             targetidx = rword_indices[start + frame: end + frame]
-            context_at_target = rdoc_ids[start + frame: end + frame]
-            context_same = context_at_target == context_at_pivot
-            weight, = move(self.xp, context_same.astype('float32'))
-            # targetidx[~context_same] = -1
+            doc_at_target = rdoc_ids[start + frame: end + frame]
+            doc_is_same = doc_at_target == doc_at_pivot
+            weight, = move(self.xp, doc_is_same.astype('float32'))
             target, = move(self.xp, targetidx)
+            sources.append(context)
             targets.append(target)
             weights.append(weight)
+            # Now add negative samples for this frame
+            size = weight.data.shape
+            samples = self.loss_func.sampler.sample((self.n_samples, size))
+            samples = samples.ravel()
+            for _ in self.n_samples:
+                # Note that the context is now negative
+                sources.append(-context)
+                weights.append(weight)
+                targets.append(samples)
+        sources = F.concat(sources, axis=0)
         targets = F.concat(targets, axis=0)
         weights = F.concat(weights, axis=0)
-        loss = self.loss(combineds, targets, weights)
+        loss = self.loss(sources, targets, weights)
         return loss
