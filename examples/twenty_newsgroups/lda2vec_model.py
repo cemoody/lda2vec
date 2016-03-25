@@ -5,6 +5,7 @@ from lda2vec.utils import move
 from chainer import Chain
 import chainer.links as L
 import chainer.functions as F
+import chainer
 
 
 class LDA2Vec(Chain):
@@ -41,6 +42,11 @@ class LDA2Vec(Chain):
         start, end = window, rword_indices.shape[0] - window
         context = (F.dropout(doc, self.dropout_ratio) +
                    F.dropout(pivot, self.dropout_ratio))
+        n_frame = 2 * window
+        # Precompute all neg samples since they're indep of frame
+        size = context.data.shape[0]
+        samples = self.sampler.sampler.sample((self.n_samples * n_frame, size))
+        samples = chainer.cuda.cupy.split(samples.ravel(), n_frame)
         sources = []
         targets = []
         weights = []
@@ -58,15 +64,12 @@ class LDA2Vec(Chain):
             sources.append(context)
             targets.append(target)
             weights.append(weight)
-            # Now add negative samples for this frame
-            size = weight.data.shape
-            samples = self.loss_func.sampler.sample((self.n_samples, size))
-            samples = samples.ravel()
-            for _ in self.n_samples:
+            sample, = move(self.xp, samples.pop())
+            targets.append(sample)
+            for _ in range(self.n_samples):
                 # Note that the context is now negative
                 sources.append(-context)
                 weights.append(weight)
-                targets.append(samples)
         sources = F.concat(sources, axis=0)
         targets = F.concat(targets, axis=0)
         weights = F.concat(weights, axis=0)
