@@ -12,10 +12,15 @@ import numpy as np
 import os.path
 import logging
 import cPickle as pickle
+from chainer import cuda
 
 # Optional: moving the model to the GPU makes it ~10x faster
 # set to False if you're having problems with Chainer and CUDA
 gpu = cuda.available
+if gpu:
+    gpu_id = int(os.getenv('CUDA_GPU'))
+    cuda.get_device(gpu_id).use()
+    print "Using GPU " + str(gpu_id)
 
 logging.basicConfig()
 

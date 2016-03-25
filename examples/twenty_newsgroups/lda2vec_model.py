@@ -9,7 +9,7 @@ import chainer.functions as F
 
 class LDA2Vec(Chain):
     def __init__(self, n_documents=100, n_document_topics=10,
-                 n_units=256, n_vocab=1000, dropout_ratio=0.0, train=True,
+                 n_units=256, n_vocab=1000, dropout_ratio=0.5, train=True,
                  counts=None, n_samples=15):
         em = EmbedMixture(n_documents, n_document_topics, n_units,
                           dropout_ratio=dropout_ratio)
@@ -27,6 +27,11 @@ class LDA2Vec(Chain):
         dl1 = dirichlet_likelihood(self.mixture.weights)
         return dl1
 
+    def loss(self, c, t, w):
+        word = F.dropout(self.embed(t), ratio=self.dropout_ratio)
+        dot = -F.log(F.sigmoid(F.sum(c * word, axis=1)) + 1e-9)
+        return F.sum(dot * w)
+
     def fit_partial(self, rdoc_ids, rword_indices, window=5):
         n_frames = 2 * window
         doc_ids, word_indices = move(self.xp, rdoc_ids, rword_indices)
@@ -39,6 +44,7 @@ class LDA2Vec(Chain):
                     F.dropout(pivot, self.dropout_ratio))
         combineds = F.concat((combined, ) * n_frames, axis=0)
         targets = []
+        weights = []
         for frame in range(-window, window + 1):
             # Skip predicting the current pivot
             if frame == 0:
@@ -48,9 +54,12 @@ class LDA2Vec(Chain):
             targetidx = rword_indices[start + frame: end + frame]
             context_at_target = rdoc_ids[start + frame: end + frame]
             context_same = context_at_target == context_at_pivot
-            targetidx[~context_same] = -1
+            weight, = move(self.xp, context_same.astype('float32'))
+            # targetidx[~context_same] = -1
             target, = move(self.xp, targetidx)
             targets.append(target)
+            weights.append(weight)
         targets = F.concat(targets, axis=0)
-        loss = self.sampler(combineds, targets)
+        weights = F.concat(weights, axis=0)
+        loss = self.loss(combineds, targets, weights)
         return loss
