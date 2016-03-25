@@ -30,8 +30,9 @@ class LDA2Vec(Chain):
 
     def loss(self, source, target, weight):
         word = F.dropout(self.embed(target), ratio=self.dropout_ratio)
-        dot = -F.log(F.sigmoid(F.sum(source * word, axis=1)) + 1e-9)
-        return F.sum(dot * weight)
+        inner = F.sum(source * word, axis=1)
+        sp = F.sum(F.softplus(-inner) * weight)
+        return sp
 
     def fit_partial(self, rdoc_ids, rword_indices, window=5):
         doc_ids, word_indices = move(self.xp, rdoc_ids, rword_indices)
