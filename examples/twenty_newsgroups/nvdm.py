@@ -2,24 +2,17 @@ import chainer
 import chainer.links as L
 import chainer.functions as F
 
-from lda2vec import utils, dirichlet_likelihood
-
-import numpy as np
+from lda2vec import utils
 
 
 class NVDM(chainer.Chain):
-    def __init__(self, n_vocab, n_topics, n_dim):
-        factors = np.random.randn(n_topics, n_dim).astype('float32')
-        factors /= np.sqrt(n_topics + n_dim)
+    def __init__(self, n_vocab, n_dim):
         super(NVDM, self).__init__(l1=L.Linear(n_vocab, n_dim),
                                    l2=L.Linear(n_dim, n_dim),
-                                   mu=L.Linear(n_dim, n_topics),
-                                   log_sigma=L.Linear(n_dim, n_topics),
-                                   factors=L.Parameter(factors),
+                                   mu_logsigma=L.Linear(n_dim, n_dim * 2),
                                    embedding=L.Linear(n_dim, n_vocab))
         self.n_vocab = n_vocab
         self.n_dim = n_dim
-        self.n_topics = n_topics
 
     def encode(self, bow):
         """ Convert the bag of words vector of shape (n_docs, n_vocab)
@@ -27,28 +20,28 @@ class NVDM(chainer.Chain):
         """
         lam = F.relu(self.l1(bow))
         pi = F.relu(self.l2(lam))
-        mu = self.mu(pi)
-        log_sigma = self.log_sigma(pi)
-        return mu, log_sigma
+        mu, log_sigma = F.split_axis(self.mu_logsigma(pi), 2, 1)
+        sample = F.gaussian(mu, log_sigma)
+        loss = F.gaussian_kl_divergence(mu, log_sigma)
+        return sample, loss
 
-    def decode(self, mu, log_sigma, word_compact):
-        """ Decode latent document vectors into word indices of shape
-        (n_docs, doc_length).
+    def decode(self, sample, bow):
+        """ Decode latent document vectors back into word counts
+        (n_docs, n_vocab).
         """
-        trgetsize = word_compact.data.shape[0]
-        batchsize = mu.data.shape[0]
-        n_repeat = trgetsize / batchsize
-        e = self.xp.random.normal(size=(batchsize, self.n_topics))
-        proportions = F.softmax(mu + F.exp(0.5 * log_sigma) * e)
-        h = F.matmul(proportions, self.factors())
-        log_prob = self.embedding(h)
-        log_prob_repeat = F.concat((log_prob, ) * n_repeat, axis=0)
-        loss_rec = F.softmax_cross_entropy(log_prob_repeat, word_compact)
-        loss_kl = F.gaussian_kl_divergence(mu, log_sigma)
-        loss_dl = dirichlet_likelihood(proportions)
-        return loss_rec, loss_kl, loss_dl
+        logprob = F.log_softmax(self.embedding(sample))
+        # This is equivalent to a softmax_cross_entropy where instead of
+        # guessing 1 of N words we have repeated observations
+        # Normal softmax for guessing the next word is:
+        # t log softmax(x), where t is 0 or 1
+        # Softmax for guessing word counts is simply doing
+        # the above more times, so multiply by the count
+        # count log softmax(x)
+        loss = -F.sum(bow * logprob)
+        return loss
 
-    def fit(self, bow, word_compact):
-        bow, word_compact = utils.move(self.xp, bow * 1.0, word_compact)
-        mu, log_sigma = self.encode(bow)
-        return self.decode(mu, log_sigma, word_compact)
+    def observe(self, bow):
+        bow, = utils.move(self.xp, bow * 1.0)
+        sample, kl = self.encode(bow)
+        rec = self.decode(sample, bow)
+        return rec, kl
