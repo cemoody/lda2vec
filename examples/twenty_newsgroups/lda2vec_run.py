@@ -13,9 +13,8 @@ import chainer.optimizers as O
 import numpy as np
 
 from lda2vec import utils
-from lda2vec import prepare_topics, print_top_words_per_topic
+# from lda2vec import prepare_topics, print_top_words_per_topic
 from lda2vec_model import LDA2Vec
-
 
 gpu_id = int(os.getenv('CUDA_GPU', 0))
 cuda.get_device(gpu_id).use()
@@ -53,8 +52,9 @@ optimizer = O.Adam()
 optimizer.setup(model)
 
 j = 0
+epoch = 0
 fraction = batchsize * 1.0 / flattened.shape[0]
-for epoch in range(500000):
+for epoch in range(5000):
     data = prepare_topics(cuda.to_cpu(model.mixture.weights.W.data).copy(),
                           cuda.to_cpu(model.mixture.factors.W.data).copy(),
                           cuda.to_cpu(model.embed.W.data).copy(),
