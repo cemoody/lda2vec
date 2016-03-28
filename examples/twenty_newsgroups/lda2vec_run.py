@@ -7,6 +7,7 @@ import os.path
 import pickle
 import time
 
+from chainer import cuda
 from chainer import serializers
 import chainer.optimizers as O
 import numpy as np
@@ -14,6 +15,11 @@ import numpy as np
 from lda2vec import utils
 from lda2vec import prepare_topics, print_top_words_per_topic
 from lda2vec_model import LDA2Vec
+
+
+gpu_id = int(os.getenv('CUDA_GPU', 0))
+cuda.get_device(gpu_id).use()
+print "Using GPU " + str(gpu_id)
 
 vocab = pickle.load(open('vocab.pkl', 'r'))
 corpus = pickle.load(open('corpus.pkl', 'r'))
@@ -30,8 +36,8 @@ n_units = 256
 # 'Strength' of the dircihlet prior; 200.0 seems to work well
 clambda = 200.0
 # Number of topics to fit
-n_topics = 32
-batchsize = 4096 * 4
+n_topics = 20
+batchsize = 4096 * 8
 counts = corpus.keys_counts[:n_vocab]
 # Get the string representation for every compact key
 words = corpus.word_list(vocab)[:n_vocab]
@@ -48,19 +54,17 @@ optimizer.setup(model)
 
 j = 0
 fraction = batchsize * 1.0 / flattened.shape[0]
-for epoch in range(500):
-    model.to_cpu()
-    data = prepare_topics(model.mixture.weights.W.data.copy(),
-                          model.mixture.factors.W.data.copy(),
-                          model.embed.W.data.copy(),
+for epoch in range(500000):
+    data = prepare_topics(cuda.to_cpu(model.mixture.weights.W.data).copy(),
+                          cuda.to_cpu(model.mixture.factors.W.data).copy(),
+                          cuda.to_cpu(model.embed.W.data).copy(),
                           words)
     print_top_words_per_topic(data)
-    model.to_gpu()
     for d, f in utils.chunks(batchsize, doc_ids, flattened):
         t0 = time.time()
-        l = model.fit_partial(d, f)
+        l = model.fit_partial(d.copy(), f.copy())
         prior = model.prior()
-        loss = l + prior * fraction
+        loss = l + prior * fraction * clambda
         optimizer.zero_grads()
         loss.backward()
         optimizer.update()

@@ -14,17 +14,17 @@ from lda2vec import preprocess, Corpus
 logging.basicConfig()
 
 # Fetch data
-texts = fetch_20newsgroups(subset='train').data
-
-
-def replace(t):
-    sep = "max>'ax>'ax>'ax>'ax>'ax>'ax>'ax>'ax>'ax>'ax>'ax>'ax>'ax>'ax"
-    return t.replace('`@("', '').replace("'ax>", '').replace(sep, '')
+remove=('headers', 'footers', 'quotes')
+texts = fetch_20newsgroups(subset='train', remove=remove).data
+# Remove tokens with these substrings
+bad = set(["ax>", '`@("', '---', '===', '^^^' ])
+def clean(line):
+    return ' '.join(w for w in line.split() if not any(t in w for t in bad))
 
 # Preprocess data
 max_length = 10000   # Limit of 10k words per document
 # Convert to unicode (spaCy only works with unicode)
-texts = [unicode(replace(d)) for d in texts]
+texts = [unicode(clean(d)) for d in texts]
 tokens, vocab = preprocess.tokenize(texts, max_length, merge=True,
                                     n_threads=4)
 corpus = Corpus()
@@ -47,6 +47,7 @@ clean = corpus.subsample_frequent(pruned)
 # and OoV words
 doc_ids = np.arange(pruned.shape[0])
 flattened, (doc_ids,) = corpus.compact_to_flat(pruned, doc_ids)
+assert flattened.min() >= 0
 # Save all of the preprocessed files
 pickle.dump(vocab, open('vocab.pkl', 'w'))
 pickle.dump(corpus, open('corpus.pkl', 'w'))
