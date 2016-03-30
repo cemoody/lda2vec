@@ -19,10 +19,13 @@ class LDA(chainer.Chain):
         self.n_dim = n_dim
 
     def forward(self, ids, bow):
-        bow, ids = utils.move(self.xp, bow * 1.0, ids)
+        bow, ids = utils.move(self.xp, bow, ids)
         proportions = self.proportions(ids)
         ld = dirichlet_likelihood(proportions)
         doc = F.matmul(F.softmax(proportions), self.factors())
         logp = F.dropout(self.embedding(doc))
-        loss = -F.sum(bow * F.log_softmax(logp))
+        # loss = -F.sum(bow * F.log_softmax(logp))
+        sources, targets, counts = [], [], []
+        lpi =  F.sum(bow * F.log_softmax(logp), axis=1)
+        loss = -F.sum(lpi)
         return loss, ld

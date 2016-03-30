@@ -16,13 +16,17 @@ from lda2vec import prepare_topics, print_top_words_per_topic
 from lda2vec import utils
 from lda import LDA
 
+gpu_id = int(os.getenv('CUDA_GPU', 0))
+cuda.get_device(gpu_id).use()
+print "Using GPU " + str(gpu_id)
+
 vocab = pickle.load(open('vocab.pkl', 'r'))
 corpus = pickle.load(open('corpus.pkl', 'r'))
 bow = np.load("bow.npy").astype('float32')
 # Remove bow counts on the first two tokens, which <SKIP> and <EOS>
 bow[:, :2] = 0
 # Normalize bag of words to be a probability
-bow = bow / bow.sum(axis=1)[:, None]
+# bow = bow / bow.sum(axis=1)[:, None]
 
 # Number of docs
 n_docs = bow.shape[0]
@@ -32,7 +36,7 @@ n_vocab = bow.shape[1]
 n_units = 256
 # number of topics
 n_topics = 20
-batchsize = 512
+batchsize = 128
 counts = corpus.keys_counts[:n_vocab]
 # Get the string representation for every compact key
 words = corpus.word_list(vocab)[:n_vocab]
@@ -47,16 +51,17 @@ optimizer.setup(model)
 
 j = 0
 fraction = batchsize * 1.0 / bow.shape[0]
-for epoch in range(500):
-    p = cuda.to_cpu(model.proportions.W.data).copy()
-    f = cuda.to_cpu(model.factors.W.data).copy()
-    w = cuda.to_cpu(model.embedding.W.data).copy()
-    d = prepare_topics(p, f, w, words)
-    print_top_words_per_topic(d)
+for epoch in range(50000000):
+    if epoch % 100 == 0:
+        p = cuda.to_cpu(model.proportions.W.data).copy()
+        f = cuda.to_cpu(model.factors.W.data).copy()
+        w = cuda.to_cpu(model.embedding.W.data).copy()
+        d = prepare_topics(p, f, w, words)
+        print_top_words_per_topic(d)
     for (ids, batch) in utils.chunks(batchsize, np.arange(bow.shape[0]), bow):
         t0 = time.time()
-        rec, ld = model.forward(ids, batch)
         optimizer.zero_grads()
+        rec, ld = model.forward(ids, batch)
         l = rec + ld
         l.backward()
         optimizer.update()
@@ -72,4 +77,5 @@ for epoch in range(500):
                     ld=float(ld.data), rate=rate)
         print msg.format(**logs)
         j += 1
-    serializers.save_hdf5("lda.hdf5", model)
+    if epoch % 100 == 0:
+        serializers.save_hdf5("lda.hdf5", model)
