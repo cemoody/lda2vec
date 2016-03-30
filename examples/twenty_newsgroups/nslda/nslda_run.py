@@ -33,7 +33,9 @@ n_vocab = flattened.max() + 1
 n_units = 256
 # number of topics
 n_topics = 20
-batchsize = 128
+batchsize = 4096 * 8
+# Strength of Dirichlet prior
+strength = 1.0
 counts = corpus.keys_counts[:n_vocab]
 # Get the string representation for every compact key
 words = corpus.word_list(vocab)[:n_vocab]
@@ -58,7 +60,7 @@ for epoch in range(50000000):
         t0 = time.time()
         optimizer.zero_grads()
         rec, ld = model.forward(doc_ids, flat)
-        l = rec + ld
+        l = rec + ld * fraction * strength
         l.backward()
         optimizer.update()
         msg = ("J:{j:05d} E:{epoch:05d} L:{rec:1.3e} "

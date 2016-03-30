@@ -24,8 +24,7 @@ class NSLDA(chainer.Chain):
     def forward(self, doc, wrd, window=5):
         doc, wrd = utils.move(self.xp, doc, wrd)
         proportions = self.proportions(doc)
-        ld = dirichlet_likelihood(proportions)
-        doc = F.matmul(F.softmax(proportions), self.factors())
-        context = self.embedding(doc)
+        ld = dirichlet_likelihood(self.proportions.W)
+        context = F.matmul(F.softmax(proportions), self.factors())
         loss = self.loss_func(context, wrd)
         return loss, ld
