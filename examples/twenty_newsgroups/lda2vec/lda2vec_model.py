@@ -47,13 +47,9 @@ class LDA2Vec(Chain):
         context = (F.dropout(doc, self.dropout_ratio) +
                    F.dropout(pivot, self.dropout_ratio))
         n_frame = 2 * window
-        # Precompute all neg samples since they're indep of frame
         size = context.data.shape[0]
-        samples = self.sampler.sampler.sample((self.n_samples * n_frame, size))
-        samples = chainer.cuda.cupy.split(samples.ravel(), n_frame)
         sources = []
         targets = []
-        weights = []
         for frame in range(-window, window + 1):
             # Skip predicting the current pivot
             if frame == 0:
@@ -65,20 +61,14 @@ class LDA2Vec(Chain):
             doc_is_same = doc_at_target == doc_at_pivot
             rand = np.random.uniform(0, 1, doc_is_same.shape[0])
             mask = (rand > self.word_dropout_ratio).astype('bool')
-            weight = np.logical_and(doc_is_same, mask)
-            weight, = move(self.xp, weight.astype('float32'))
+            weight = np.logical_and(doc_is_same, mask).astype('int32')
+            # If weight is 1.0 then targetidx
+            # If weight is 0.0 then -1
+            targetidx = targetidx * weight + -1 * (1 - weight)
             target, = move(self.xp, targetidx)
             sources.append(context)
             targets.append(target)
-            weights.append(weight)
-            sample, = move(self.xp, samples.pop())
-            targets.append(sample)
-            for _ in range(self.n_samples):
-                # Note that the context is now negative
-                sources.append(-context)
-                weights.append(weight)
         sources = F.concat(sources, axis=0)
         targets = F.concat(targets, axis=0)
-        weights = F.concat(weights, axis=0)
-        loss = self.loss(sources, targets, weights)
+        loss = self.sampler(sources, targets)
         return loss
