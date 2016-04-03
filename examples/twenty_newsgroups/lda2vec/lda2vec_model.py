@@ -7,11 +7,13 @@ import chainer.links as L
 import chainer.functions as F
 import chainer
 
+import numpy as np
+
 
 class LDA2Vec(Chain):
     def __init__(self, n_documents=100, n_document_topics=10,
                  n_units=256, n_vocab=1000, dropout_ratio=0.5, train=True,
-                 counts=None, n_samples=15):
+                 counts=None, n_samples=15, word_dropout_ratio=0.0):
         em = EmbedMixture(n_documents, n_document_topics, n_units,
                           dropout_ratio=dropout_ratio)
         kwargs = {}
@@ -22,6 +24,7 @@ class LDA2Vec(Chain):
         self.n_units = n_units
         self.train = train
         self.dropout_ratio = dropout_ratio
+        self.word_dropout_ratio = word_dropout_ratio
         self.n_samples = n_samples
 
     def prior(self):
@@ -60,7 +63,10 @@ class LDA2Vec(Chain):
             targetidx = rword_indices[start + frame: end + frame]
             doc_at_target = rdoc_ids[start + frame: end + frame]
             doc_is_same = doc_at_target == doc_at_pivot
-            weight, = move(self.xp, doc_is_same.astype('float32'))
+            rand = np.random.uniform(0, 1, doc_is_same.shape[0])
+            mask = (rand > self.word_dropout_ratio).astype('bool')
+            weight = np.logical_and(doc_is_same, mask)
+            weight, = move(self.xp, weight.astype('float32'))
             target, = move(self.xp, targetidx)
             sources.append(context)
             targets.append(target)

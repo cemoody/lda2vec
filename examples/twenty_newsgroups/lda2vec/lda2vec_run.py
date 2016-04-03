@@ -7,13 +7,14 @@ import os.path
 import pickle
 import time
 
+import chainer
 from chainer import cuda
 from chainer import serializers
 import chainer.optimizers as O
 import numpy as np
 
 from lda2vec import utils
-# from lda2vec import prepare_topics, print_top_words_per_topic
+from lda2vec import prepare_topics, print_top_words_per_topic
 from lda2vec_model import LDA2Vec
 
 gpu_id = int(os.getenv('CUDA_GPU', 0))
@@ -50,6 +51,8 @@ if os.path.exists('lda2vec.hdf5'):
 model.to_gpu()
 optimizer = O.Adam()
 optimizer.setup(model)
+clip = chainer.optimizer.GradientClipping(5.0)
+optimizer.add_hook(clip)
 
 j = 0
 epoch = 0
