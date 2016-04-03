@@ -21,8 +21,8 @@ cuda.get_device(gpu_id).use()
 print "Using GPU " + str(gpu_id)
 
 # You must run preprocess.py before this data becomes available
-vocab = pickle.load(open('vocab.pkl', 'r'))
-corpus = pickle.load(open('corpus.pkl', 'r'))
+vocab = pickle.load(open('vocab', 'r'))
+corpus = pickle.load(open('corpus', 'r'))
 data = np.load(open('data.npz', 'r'))
 flattened = data['flattened']
 story_id = data['story_id']
@@ -45,14 +45,14 @@ clambda = 200.0
 # Number of topics to fit
 n_story_topics = 40
 n_author_topics = 20
-batchsize = 4096 * 8
+batchsize = 4096 * 2
 counts = corpus.keys_counts[:n_vocab]
 # Get the string representation for every compact key
 words = corpus.word_list(vocab)[:n_vocab]
 
 model = LDA2Vec(n_stories, n_story_topics, n_authors, n_author_topics,
                 n_units=n_units, n_vocab=n_vocab, counts=counts,
-                n_samples=15)
+                n_samples=7)
 if os.path.exists('lda2vec_hn.hdf5'):
     print "Reloading from saved"
     serializers.load_hdf5("lda2vec_hn.hdf5", model)
@@ -66,13 +66,14 @@ fraction = batchsize * 1.0 / flattened.shape[0]
 for epoch in range(5000):
     print "Story topics"
     w = cuda.to_cpu(model.mixture_stories.weights.W.data).copy()
-    f = cuda.to_cpu(model.mixture_stories.factors.W.data).copy(),
-    d = prepare_topics(w, f, words)
+    f = cuda.to_cpu(model.mixture_stories.factors.W.data).copy()
+    v = cuda.to_cpu(model.embed.W.data).copy()
+    d = prepare_topics(w, f, v, words)
     print_top_words_per_topic(d)
     print "Author topics"
     w = cuda.to_cpu(model.mixture_authors.weights.W.data).copy()
-    f = cuda.to_cpu(model.mixture_authors.factors.W.data).copy(),
-    d = prepare_topics(w, f, words)
+    f = cuda.to_cpu(model.mixture_authors.factors.W.data).copy()
+    d = prepare_topics(w, f, v, words)
     print_top_words_per_topic(d)
     for s, a, f in utils.chunks(batchsize, story_id, author_id, flattened):
         t0 = time.time()

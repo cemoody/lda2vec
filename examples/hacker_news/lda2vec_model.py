@@ -43,9 +43,8 @@ class LDA2Vec(Chain):
         pivot = self.embed(next(move(self.xp, rwrd_ids[window: -window])))
         sty_at_pivot = rsty_ids[window: -window]
         aut_at_pivot = raut_ids[window: -window]
-        sty = self.mixture(next(move(self.xp, sty_at_pivot)))
-        aut = self.mixture(next(move(self.xp, aut_at_pivot)))
-        loss = 0.0
+        sty = self.mixture_stories(next(move(self.xp, sty_at_pivot)))
+        aut = self.mixture_authors(next(move(self.xp, aut_at_pivot)))
         start, end = window, rwrd_ids.shape[0] - window
         context = (F.dropout(sty, self.dropout_ratio) +
                    F.dropout(aut, self.dropout_ratio) +
@@ -70,9 +69,9 @@ class LDA2Vec(Chain):
             wrd_at_target = rwrd_ids[start + frame: end + frame]
             sty_at_target = rsty_ids[start + frame: end + frame]
             aut_at_target = raut_ids[start + frame: end + frame]
-            doc_is_same = sty_at_target == sty_at_pivot
+            sty_is_same = sty_at_target == sty_at_pivot
             usr_is_same = aut_at_target == aut_at_pivot
-            is_same = doc_is_same & usr_is_same
+            is_same = sty_is_same & usr_is_same
             weight, = move(self.xp, is_same.astype('float32'))
             target, = move(self.xp, wrd_at_target)
             sources.append(context)
