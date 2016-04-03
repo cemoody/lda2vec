@@ -59,7 +59,7 @@ epoch = 0
 fraction = batchsize * 1.0 / flattened.shape[0]
 for epoch in range(5000):
     data = prepare_topics(cuda.to_cpu(model.mixture.weights.W.data).copy(),
-                          cuda.to_cpu(model.mixture.factors.W.data).copy(),
+                          cuda.to_cpu(model.mixture.factors.W.data).copy().T,
                           cuda.to_cpu(model.embed.W.data).copy(),
                           words)
     print_top_words_per_topic(data)
