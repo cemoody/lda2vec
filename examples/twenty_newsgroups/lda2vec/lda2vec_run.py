@@ -7,23 +7,24 @@ import os.path
 import pickle
 import time
 
+import chainer
 from chainer import cuda
 from chainer import serializers
 import chainer.optimizers as O
 import numpy as np
 
 from lda2vec import utils
-# from lda2vec import prepare_topics, print_top_words_per_topic
+from lda2vec import prepare_topics, print_top_words_per_topic
 from lda2vec_model import LDA2Vec
 
 gpu_id = int(os.getenv('CUDA_GPU', 0))
 cuda.get_device(gpu_id).use()
 print "Using GPU " + str(gpu_id)
 
-vocab = pickle.load(open('vocab.pkl', 'r'))
-corpus = pickle.load(open('corpus.pkl', 'r'))
-flattened = np.load("flattened.npy")
-doc_ids = np.load("doc_ids.npy")
+vocab = pickle.load(open('../data/vocab.pkl', 'r'))
+corpus = pickle.load(open('../data/corpus.pkl', 'r'))
+flattened = np.load("../data/flattened.npy")
+doc_ids = np.load("../data/doc_ids.npy")
 
 # Model Parameters
 # Number of documents
@@ -36,7 +37,7 @@ n_units = 256
 clambda = 200.0
 # Number of topics to fit
 n_topics = 20
-batchsize = 4096 * 8
+batchsize = 4096
 counts = corpus.keys_counts[:n_vocab]
 # Get the string representation for every compact key
 words = corpus.word_list(vocab)[:n_vocab]
@@ -50,6 +51,8 @@ if os.path.exists('lda2vec.hdf5'):
 model.to_gpu()
 optimizer = O.Adam()
 optimizer.setup(model)
+clip = chainer.optimizer.GradientClipping(5.0)
+optimizer.add_hook(clip)
 
 j = 0
 epoch = 0
