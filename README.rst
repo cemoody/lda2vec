@@ -18,7 +18,7 @@ lda2vec: Tools for interpreting natural language
 
 The lda2vec model tries to mix the best parts of word2vec and LDA
 into a single framework. word2vec captures powerful relationships 
-between words, but the resulting vectors are largely interpretable
+between words, but the resulting vectors are largely uninterpretable
 and don't represent documents. LDA on the other hand is quite
 interpretable by humans, but doesn't model local word relationships
 like word2vec. We build a model that builds both word and document
