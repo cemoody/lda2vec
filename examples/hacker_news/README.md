@@ -77,20 +77,20 @@ Data Prepataion
      , c.ranking as comment_ranking
      , author_counts.n_comments AS author_comment_count
      , story_counts.n_comments AS story_comment_count
-  FROM [lda2vec-v02:data.comment_to_story_id] c
-  JOIN (SELECT story_id
-             , COUNT(story_id) AS n_comments
+    FROM [lda2vec-v02:data.comment_to_story_id] c
+    JOIN (SELECT story_id
+               , COUNT(story_id) AS n_comments
           FROM [lda2vec-v02:data.comment_to_story_id]
           GROUP BY story_id
         ) AS story_counts
     ON c.story_id = story_counts.story_id 
-  JOIN (SELECT author
-             , COUNT(author) AS n_comments
+    JOIN (SELECT author
+               , COUNT(author) AS n_comments
           FROM [lda2vec-v02:data.comment_to_story_id]
           GROUP BY author
         ) AS author_counts
     ON c.author = author_counts.author 
-  JOIN [fh-bigquery:hackernews.stories] s
+    JOIN [fh-bigquery:hackernews.stories] s
     ON s.id = c.story_id
- WHERE story_counts.n_comments > 10
-   AND author_counts.n_comments > 10
+    WHERE story_counts.n_comments > 10
+      AND author_counts.n_comments > 10
