@@ -63,6 +63,7 @@ for epoch in range(5000):
                           cuda.to_cpu(model.embed.W.data).copy(),
                           words)
     print_top_words_per_topic(data)
+    np.savez('topics.pyldavis', **data)
     for d, f in utils.chunks(batchsize, doc_ids, flattened):
         t0 = time.time()
         l = model.fit_partial(d.copy(), f.copy())

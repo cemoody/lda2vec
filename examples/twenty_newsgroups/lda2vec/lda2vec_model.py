@@ -5,7 +5,6 @@ from lda2vec.utils import move
 from chainer import Chain
 import chainer.links as L
 import chainer.functions as F
-import chainer
 
 import numpy as np
 
@@ -31,12 +30,6 @@ class LDA2Vec(Chain):
         dl1 = dirichlet_likelihood(self.mixture.weights)
         return dl1
 
-    def loss(self, source, target, weight):
-        word = F.dropout(self.embed(target), ratio=self.dropout_ratio)
-        inner = F.sum(source * word, axis=1)
-        sp = F.sum(F.softplus(-inner) * weight)
-        return sp
-
     def fit_partial(self, rdoc_ids, rword_indices, window=5):
         doc_ids, word_indices = move(self.xp, rdoc_ids, rword_indices)
         pivot = self.embed(next(move(self.xp, rword_indices[window: -window])))
@@ -46,8 +39,6 @@ class LDA2Vec(Chain):
         start, end = window, rword_indices.shape[0] - window
         context = (F.dropout(doc, self.dropout_ratio) +
                    F.dropout(pivot, self.dropout_ratio))
-        n_frame = 2 * window
-        size = context.data.shape[0]
         sources = []
         targets = []
         for frame in range(-window, window + 1):
