@@ -59,17 +59,17 @@ epoch = 0
 fraction = batchsize * 1.0 / flattened.shape[0]
 for epoch in range(5000):
     data = prepare_topics(cuda.to_cpu(model.mixture.weights.W.data).copy(),
-                          cuda.to_cpu(model.mixture.factors.W.data).copy().T,
-                          cuda.to_cpu(model.embed.W.data).copy(),
+                          cuda.to_cpu(model.mixture.factors.W.data).copy(),
+                          cuda.to_cpu(model.sampler.W.data).copy(),
                           words)
     print_top_words_per_topic(data)
     np.savez('topics.pyldavis', **data)
     for d, f in utils.chunks(batchsize, doc_ids, flattened):
         t0 = time.time()
+        optimizer.zero_grads()
         l = model.fit_partial(d.copy(), f.copy())
         prior = model.prior()
-        loss = l + prior * fraction * clambda
-        optimizer.zero_grads()
+        loss = prior * fraction
         loss.backward()
         optimizer.update()
         msg = ("J:{j:05d} E:{epoch:05d} L:{loss:1.3e} "
@@ -79,7 +79,7 @@ for epoch in range(5000):
         t1 = time.time()
         dt = t1 - t0
         rate = batchsize / dt
-        logs = dict(loss=float(l.data), epoch=epoch, j=j,
+        logs = dict(loss=float(l), epoch=epoch, j=j,
                     prior=float(prior.data), rate=rate)
         print msg.format(**logs)
         j += 1

@@ -17,9 +17,10 @@ class LDA2Vec(Chain):
                           dropout_ratio=dropout_ratio)
         kwargs = {}
         kwargs['mixture'] = em
-        kwargs['embed'] = L.EmbedID(n_vocab, n_units)
         kwargs['sampler'] = L.NegativeSampling(n_units, counts, n_samples)
         super(LDA2Vec, self).__init__(**kwargs)
+        rand = np.random.random(self.sampler.W.data.shape)
+        self.sampler.W.data[:, :] = rand[:, :]
         self.n_units = n_units
         self.train = train
         self.dropout_ratio = dropout_ratio
@@ -32,15 +33,14 @@ class LDA2Vec(Chain):
 
     def fit_partial(self, rdoc_ids, rword_indices, window=5):
         doc_ids, word_indices = move(self.xp, rdoc_ids, rword_indices)
-        pivot = self.embed(next(move(self.xp, rword_indices[window: -window])))
+        pivot_idx = next(move(self.xp, rword_indices[window: -window]))
+        pivot = F.embed_id(pivot_idx, self.sampler.W)
         doc_at_pivot = rdoc_ids[window: -window]
         doc = self.mixture(next(move(self.xp, doc_at_pivot)))
         loss = 0.0
         start, end = window, rword_indices.shape[0] - window
         context = (F.dropout(doc, self.dropout_ratio) +
                    F.dropout(pivot, self.dropout_ratio))
-        sources = []
-        targets = []
         for frame in range(-window, window + 1):
             # Skip predicting the current pivot
             if frame == 0:
@@ -57,9 +57,6 @@ class LDA2Vec(Chain):
             # If weight is 0.0 then -1
             targetidx = targetidx * weight + -1 * (1 - weight)
             target, = move(self.xp, targetidx)
-            sources.append(context)
-            targets.append(target)
-        sources = F.concat(sources, axis=0)
-        targets = F.concat(targets, axis=0)
-        loss = self.sampler(sources, targets)
-        return loss
+            loss = self.sampler(context, target)
+            loss.backward()
+        return loss.data
