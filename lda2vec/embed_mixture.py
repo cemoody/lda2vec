@@ -65,11 +65,11 @@ class EmbedMixture(chainer.Chain):
         self.n_topics = n_topics
         self.n_dim = n_dim
         self.dropout_ratio = dropout_ratio
-        # factors = _orthogonal_matrix((n_topics, n_dim)).astype('float32')
-        # factors /= np.sqrt(n_topics + n_dim)
+        factors = _orthogonal_matrix((n_topics, n_dim)).astype('float32')
+        factors /= np.sqrt(n_topics + n_dim)
         super(EmbedMixture, self).__init__(
             weights=L.EmbedID(n_documents, n_topics),
-            factors=L.Linear(n_topics, n_dim))
+            factors=L.Parameter(factors))
         self.weights.W.data[...] /= np.sqrt(n_documents + n_topics)
 
     def __call__(self, doc_ids):
@@ -88,7 +88,8 @@ class EmbedMixture(chainer.Chain):
         # (batchsize, ) --> (batchsize, multinomial)
         proportions = self.proportions(doc_ids, softmax=True)
         # (batchsize, n_factors) * (n_factors, n_dim) --> (batchsize, n_dim)
-        w_sum = F.dropout(self.factors(proportions), ratio=self.dropout_ratio)
+        factors = F.dropout(self.factors(), ratio=self.dropout_ratio)
+        w_sum = F.matmul(proportions, factors)
         return w_sum
 
     def proportions(self, doc_ids, softmax=False):
