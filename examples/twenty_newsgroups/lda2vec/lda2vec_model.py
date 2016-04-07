@@ -5,7 +5,6 @@ from lda2vec.utils import move
 from chainer import Chain
 import chainer.links as L
 import chainer.functions as F
-import chainer
 
 import numpy as np
 
@@ -18,9 +17,10 @@ class LDA2Vec(Chain):
                           dropout_ratio=dropout_ratio)
         kwargs = {}
         kwargs['mixture'] = em
-        kwargs['embed'] = L.EmbedID(n_vocab, n_units)
         kwargs['sampler'] = L.NegativeSampling(n_units, counts, n_samples)
         super(LDA2Vec, self).__init__(**kwargs)
+        rand = np.random.random(self.sampler.W.data.shape)
+        self.sampler.W.data[:, :] = rand[:, :]
         self.n_units = n_units
         self.train = train
         self.dropout_ratio = dropout_ratio
@@ -31,29 +31,16 @@ class LDA2Vec(Chain):
         dl1 = dirichlet_likelihood(self.mixture.weights)
         return dl1
 
-    def loss(self, source, target, weight):
-        word = F.dropout(self.embed(target), ratio=self.dropout_ratio)
-        inner = F.sum(source * word, axis=1)
-        sp = F.sum(F.softplus(-inner) * weight)
-        return sp
-
     def fit_partial(self, rdoc_ids, rword_indices, window=5):
         doc_ids, word_indices = move(self.xp, rdoc_ids, rword_indices)
-        pivot = self.embed(next(move(self.xp, rword_indices[window: -window])))
+        pivot_idx = next(move(self.xp, rword_indices[window: -window]))
+        pivot = F.embed_id(pivot_idx, self.sampler.W)
         doc_at_pivot = rdoc_ids[window: -window]
         doc = self.mixture(next(move(self.xp, doc_at_pivot)))
         loss = 0.0
         start, end = window, rword_indices.shape[0] - window
         context = (F.dropout(doc, self.dropout_ratio) +
                    F.dropout(pivot, self.dropout_ratio))
-        n_frame = 2 * window
-        # Precompute all neg samples since they're indep of frame
-        size = context.data.shape[0]
-        samples = self.sampler.sampler.sample((self.n_samples * n_frame, size))
-        samples = chainer.cuda.cupy.split(samples.ravel(), n_frame)
-        sources = []
-        targets = []
-        weights = []
         for frame in range(-window, window + 1):
             # Skip predicting the current pivot
             if frame == 0:
@@ -65,20 +52,11 @@ class LDA2Vec(Chain):
             doc_is_same = doc_at_target == doc_at_pivot
             rand = np.random.uniform(0, 1, doc_is_same.shape[0])
             mask = (rand > self.word_dropout_ratio).astype('bool')
-            weight = np.logical_and(doc_is_same, mask)
-            weight, = move(self.xp, weight.astype('float32'))
+            weight = np.logical_and(doc_is_same, mask).astype('int32')
+            # If weight is 1.0 then targetidx
+            # If weight is 0.0 then -1
+            targetidx = targetidx * weight + -1 * (1 - weight)
             target, = move(self.xp, targetidx)
-            sources.append(context)
-            targets.append(target)
-            weights.append(weight)
-            sample, = move(self.xp, samples.pop())
-            targets.append(sample)
-            for _ in range(self.n_samples):
-                # Note that the context is now negative
-                sources.append(-context)
-                weights.append(weight)
-        sources = F.concat(sources, axis=0)
-        targets = F.concat(targets, axis=0)
-        weights = F.concat(weights, axis=0)
-        loss = self.loss(sources, targets, weights)
-        return loss
+            loss = self.sampler(context, target)
+            loss.backward()
+        return loss.data
