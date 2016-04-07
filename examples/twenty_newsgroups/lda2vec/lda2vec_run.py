@@ -38,12 +38,16 @@ clambda = 200.0
 # Number of topics to fit
 n_topics = 20
 batchsize = 4096
-counts = corpus.keys_counts[:n_vocab]
+term_frequency = corpus.keys_counts[:n_vocab]
 # Get the string representation for every compact key
 words = corpus.word_list(vocab)[:n_vocab]
+# How many tokens are in each document
+doc_idx, lengths = np.unique(doc_ids, return_counts=True)
+doc_lengths = np.zeros(doc_ids.max() + 1, dtype='int32')
+doc_lengths[doc_idx] = lengths
 
 model = LDA2Vec(n_documents=n_docs, n_document_topics=n_topics,
-                n_units=n_units, n_vocab=n_vocab, counts=counts,
+                n_units=n_units, n_vocab=n_vocab, counts=term_frequency,
                 n_samples=15)
 if os.path.exists('lda2vec.hdf5'):
     print "Reloading from saved"
@@ -63,6 +67,8 @@ for epoch in range(5000):
                           cuda.to_cpu(model.sampler.W.data).copy(),
                           words)
     print_top_words_per_topic(data)
+    data['doc_lengths'] = doc_lengths
+    data['term_frequency'] = term_frequency
     np.savez('topics.pyldavis', **data)
     for d, f in utils.chunks(batchsize, doc_ids, flattened):
         t0 = time.time()
