@@ -24,7 +24,7 @@ def prob_words(context, vocab, temperature=1.0):
 
 
 def prepare_topics(weights, factors, word_vectors, vocab, temperature=1.0,
-                   doc_lengths=None, term_frequency=None):
+                   doc_lengths=None, term_frequency=None, normalize=False):
     """ Collects a dictionary of word, document and topic distributions.
 
     Arguments
@@ -62,8 +62,9 @@ def prepare_topics(weights, factors, word_vectors, vocab, temperature=1.0,
     topic_to_word = []
     msg = "Vocabulary size did not match size of word vectors"
     assert len(vocab) == word_vectors.shape[0], msg
-    word_vectors = word_vectors / np.linalg.norm(word_vectors, axis=1)[:, None]
-    factors = factors / np.linalg.norm(factors, axis=1)[:, None]
+    if normalize:
+        word_vectors /= np.linalg.norm(word_vectors, axis=1)[:, None]
+    # factors = factors / np.linalg.norm(factors, axis=1)[:, None]
     for factor_vector in factors:
         factor_to_word = prob_words(factor_vector, word_vectors,
                                     temperature=temperature)
