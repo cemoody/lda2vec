@@ -101,7 +101,4 @@ class EmbedMixture(chainer.Chain):
                 Two dimensional topic weights of each document.
         """
         w = F.dropout(self.weights(doc_ids), ratio=self.dropout_ratio)
-        if softmax:
-            return F.softmax(w)
-        else:
-            return w
+        return F.softmax(w) if softmax else w
