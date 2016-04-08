@@ -38,13 +38,16 @@ clambda = 200.0
 # Number of topics to fit
 n_topics = 20
 batchsize = 4096
-term_frequency = corpus.keys_counts[:n_vocab]
 # Get the string representation for every compact key
 words = corpus.word_list(vocab)[:n_vocab]
 # How many tokens are in each document
 doc_idx, lengths = np.unique(doc_ids, return_counts=True)
 doc_lengths = np.zeros(doc_ids.max() + 1, dtype='int32')
 doc_lengths[doc_idx] = lengths
+# Count all token frequencies
+tok_idx, freq = np.unique(flattened, return_counts=True)
+term_frequency = np.zeros(n_vocab, dtype='int32')
+term_frequency[tok_idx] = freq
 
 model = LDA2Vec(n_documents=n_docs, n_document_topics=n_topics,
                 n_units=n_units, n_vocab=n_vocab, counts=term_frequency,
