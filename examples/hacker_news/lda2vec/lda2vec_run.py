@@ -21,32 +21,51 @@ gpu_id = int(os.getenv('CUDA_GPU', 0))
 cuda.get_device(gpu_id).use()
 print "Using GPU " + str(gpu_id)
 
-vocab = pickle.load(open('../data/vocab.pkl', 'r'))
-corpus = pickle.load(open('../data/corpus.pkl', 'r'))
-flattened = np.load("../data/flattened.npy")
-doc_ids = np.load("../data/doc_ids.npy")
+# You must run preprocess.py before this data becomes available
+vocab = pickle.load(open('../data/vocab', 'r'))
+corpus = pickle.load(open('../data/corpus', 'r'))
+data = np.load(open('../data/data.npz', 'r'))
+flattened = data['flattened']
+story_id = data['story_id']
+author_id = data['author_id']
+time_id = data['time_id']
+ranking = data['ranking'].astype('float32')
+score = data['score'].astype('float32')
+
 
 # Model Parameters
 # Number of documents
-n_docs = doc_ids.max() + 1
+n_stories = story_id.max() + 1
+# Number of users
+n_authors = author_id.max() + 1
 # Number of unique words in the vocabulary
 n_vocab = flattened.max() + 1
 # Number of dimensions in a single word vector
 n_units = 256
-# 'Strength' of the dircihlet prior; 200.0 seems to work well
-clambda = 200.0
 # Number of topics to fit
-n_topics = 20
+n_story_topics = 40
+n_author_topics = 20
 batchsize = 4096
-term_frequency = corpus.keys_counts[:n_vocab]
 # Get the string representation for every compact key
 words = corpus.word_list(vocab)[:n_vocab]
-# How many tokens are in each document
-doc_idx, lengths = np.unique(doc_ids, return_counts=True)
-doc_lengths = np.zeros(doc_ids.max() + 1, dtype='int32')
-doc_lengths[doc_idx] = lengths
 
-model = LDA2Vec(n_documents=n_docs, n_document_topics=n_topics,
+# How many tokens are in each story
+sty_idx, lengths = np.unique(story_id, return_counts=True)
+sty_len = np.zeros(sty_idx.max() + 1, dtype='int32')
+sty_len[sty_idx] = lengths
+
+# How many tokens are in each author
+aut_idx, lengths = np.unique(author_id, return_counts=True)
+aut_len = np.zeros(aut_idx.max() + 1, dtype='int32')
+aut_len[aut_idx] = lengths
+
+# Count all token frequencies
+tok_idx, freq = np.unique(flattened, return_counts=True)
+term_frequency = np.zeros(n_vocab, dtype='int32')
+term_frequency[tok_idx] = freq
+
+model = LDA2Vec(n_stories=n_stories, n_story_topics=n_story_topics,
+                n_authors=n_authors, n_author_topics=n_author_topics,
                 n_units=n_units, n_vocab=n_vocab, counts=term_frequency,
                 n_samples=15)
 if os.path.exists('lda2vec.hdf5'):
@@ -62,18 +81,26 @@ j = 0
 epoch = 0
 fraction = batchsize * 1.0 / flattened.shape[0]
 for epoch in range(5000):
-    data = prepare_topics(cuda.to_cpu(model.mixture.weights.W.data).copy(),
-                          cuda.to_cpu(model.mixture.factors.W.data).copy(),
-                          cuda.to_cpu(model.sampler.W.data).copy(),
-                          words)
-    print_top_words_per_topic(data)
-    data['doc_lengths'] = doc_lengths
+    ts = prepare_topics(cuda.to_cpu(model.mixture_sty.weights.W.data).copy(),
+                        cuda.to_cpu(model.mixture_sty.factors.W.data).copy(),
+                        cuda.to_cpu(model.sampler.W.data).copy(),
+                        words)
+    print_top_words_per_topic(ts)
+    data['sty_len'] = sty_len
     data['term_frequency'] = term_frequency
-    np.savez('topics.pyldavis', **data)
-    for d, f in utils.chunks(batchsize, doc_ids, flattened):
+    np.savez('topics.story.pyldavis', **data)
+    ta = prepare_topics(cuda.to_cpu(model.mixture_aut.weights.W.data).copy(),
+                        cuda.to_cpu(model.mixture_aut.factors.W.data).copy(),
+                        cuda.to_cpu(model.sampler.W.data).copy(),
+                        words)
+    print_top_words_per_topic(ta)
+    data['aut_len'] = sty_len
+    data['term_frequency'] = term_frequency
+    np.savez('topics.author.pyldavis', **data)
+    for s, a, f in utils.chunks(batchsize, story_id, author_id, flattened):
         t0 = time.time()
         optimizer.zero_grads()
-        l = model.fit_partial(d.copy(), f.copy())
+        l = model.fit_partial(s.copy(), a.copy(), f.copy())
         prior = model.prior()
         loss = prior * fraction
         loss.backward()

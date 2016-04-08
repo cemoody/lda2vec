@@ -10,13 +10,17 @@ import numpy as np
 
 
 class LDA2Vec(Chain):
-    def __init__(self, n_documents=100, n_document_topics=10,
+    def __init__(self, n_stories=100, n_story_topics=10,
+                 n_authors=100, n_author_topics=10,
                  n_units=256, n_vocab=1000, dropout_ratio=0.5, train=True,
                  counts=None, n_samples=15, word_dropout_ratio=0.0):
-        em = EmbedMixture(n_documents, n_document_topics, n_units,
-                          dropout_ratio=dropout_ratio)
+        em1 = EmbedMixture(n_stories, n_story_topics, n_units,
+                           dropout_ratio=dropout_ratio)
+        em2 = EmbedMixture(n_authors, n_author_topics, n_units,
+                           dropout_ratio=dropout_ratio)
         kwargs = {}
-        kwargs['mixture'] = em
+        kwargs['mixture_sty'] = em1
+        kwargs['mixture_aut'] = em2
         kwargs['sampler'] = L.NegativeSampling(n_units, counts, n_samples)
         super(LDA2Vec, self).__init__(**kwargs)
         rand = np.random.random(self.sampler.W.data.shape)
@@ -31,28 +35,32 @@ class LDA2Vec(Chain):
         dl1 = dirichlet_likelihood(self.mixture.weights)
         return dl1
 
-    def fit_partial(self, rdoc_ids, rword_indices, window=5):
-        doc_ids, word_indices = move(self.xp, rdoc_ids, rword_indices)
-        pivot_idx = next(move(self.xp, rword_indices[window: -window]))
+    def fit_partial(self, rsty_ids, raut_ids, rwrd_ids, window=5):
+        sty_ids, aut_ids, wrd_ids = move(self.xp, rsty_ids, raut_ids, rwrd_ids)
+        pivot_idx = next(move(self.xp, rwrd_ids[window: -window]))
         pivot = F.embed_id(pivot_idx, self.sampler.W)
-        doc_at_pivot = rdoc_ids[window: -window]
-        doc = self.mixture(next(move(self.xp, doc_at_pivot)))
+        sty_at_pivot = rsty_ids[window: -window]
+        aut_at_pivot = raut_ids[window: -window]
+        sty = self.mixture_sty(next(move(self.xp, sty_at_pivot)))
+        aut = self.mixture_aut(next(move(self.xp, aut_at_pivot)))
         loss = 0.0
-        start, end = window, rword_indices.shape[0] - window
-        context = (F.dropout(doc, self.dropout_ratio) +
-                   F.dropout(pivot, self.dropout_ratio))
+        start, end = window, rwrd_ids.shape[0] - window
+        context = sty + aut + F.dropout(pivot, self.dropout_ratio)
         for frame in range(-window, window + 1):
             # Skip predicting the current pivot
             if frame == 0:
                 continue
             # Predict word given context and pivot word
             # The target starts before the pivot
-            targetidx = rword_indices[start + frame: end + frame]
-            doc_at_target = rdoc_ids[start + frame: end + frame]
-            doc_is_same = doc_at_target == doc_at_pivot
-            rand = np.random.uniform(0, 1, doc_is_same.shape[0])
+            targetidx = rwrd_ids[start + frame: end + frame]
+            sty_at_target = rsty_ids[start + frame: end + frame]
+            aut_at_target = raut_ids[start + frame: end + frame]
+            sty_is_same = sty_at_target == sty_at_pivot
+            aut_is_same = aut_at_target == aut_at_pivot
+            rand = np.random.uniform(0, 1, sty_is_same.shape[0])
             mask = (rand > self.word_dropout_ratio).astype('bool')
-            weight = np.logical_and(doc_is_same, mask).astype('int32')
+            sty_and_aut_are_same = np.logical_and(sty_is_same, aut_is_same)
+            weight = np.logical_and(sty_and_aut_are_same, mask).astype('int32')
             # If weight is 1.0 then targetidx
             # If weight is 0.0 then -1
             targetidx = targetidx * weight + -1 * (1 - weight)
