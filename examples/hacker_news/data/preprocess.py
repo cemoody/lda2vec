@@ -79,6 +79,9 @@ story_id = pd.Categorical(features['story_id']).codes
 story_time = pd.to_datetime(features['story_time'], unit='s')
 days_since = (story_time - story_time.min()) / pd.Timedelta('1 day')
 time_id = days_since.astype('int32')
+features['story_id_codes'] = story_id
+features['author_id_codes'] = story_id
+features['time_id_codes'] = time_id
 
 print "n_authors", author_id.max()
 print "n_stories", story_id.max()
