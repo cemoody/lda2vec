@@ -86,17 +86,17 @@ for epoch in range(5000):
                         cuda.to_cpu(model.sampler.W.data).copy(),
                         words)
     print_top_words_per_topic(ts)
-    data['sty_len'] = sty_len
-    data['term_frequency'] = term_frequency
-    np.savez('topics.story.pyldavis', **data)
+    ts['doc_lengths'] = sty_len
+    ts['term_frequency'] = term_frequency
+    np.savez('topics.story.pyldavis', **ts)
     ta = prepare_topics(cuda.to_cpu(model.mixture_aut.weights.W.data).copy(),
                         cuda.to_cpu(model.mixture_aut.factors.W.data).copy(),
                         cuda.to_cpu(model.sampler.W.data).copy(),
                         words)
     print_top_words_per_topic(ta)
-    data['aut_len'] = sty_len
-    data['term_frequency'] = term_frequency
-    np.savez('topics.author.pyldavis', **data)
+    ta['doc_lengths'] = aut_len
+    ta['term_frequency'] = term_frequency
+    np.savez('topics.author.pyldavis', **ta)
     for s, a, f in utils.chunks(batchsize, story_id, author_id, flattened):
         t0 = time.time()
         optimizer.zero_grads()

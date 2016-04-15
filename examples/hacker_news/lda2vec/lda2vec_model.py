@@ -32,8 +32,9 @@ class LDA2Vec(Chain):
         self.n_samples = n_samples
 
     def prior(self):
-        dl1 = dirichlet_likelihood(self.mixture.weights)
-        return dl1
+        dl1 = dirichlet_likelihood(self.mixture_sty.weights)
+        dl2 = dirichlet_likelihood(self.mixture_aut.weights)
+        return dl1 + dl2
 
     def fit_partial(self, rsty_ids, raut_ids, rwrd_ids, window=5):
         sty_ids, aut_ids, wrd_ids = move(self.xp, rsty_ids, raut_ids, rwrd_ids)
@@ -57,6 +58,7 @@ class LDA2Vec(Chain):
             aut_at_target = raut_ids[start + frame: end + frame]
             sty_is_same = sty_at_target == sty_at_pivot
             aut_is_same = aut_at_target == aut_at_pivot
+            # Randomly dropout words (default is to never do this)
             rand = np.random.uniform(0, 1, sty_is_same.shape[0])
             mask = (rand > self.word_dropout_ratio).astype('bool')
             sty_and_aut_are_same = np.logical_and(sty_is_same, aut_is_same)
