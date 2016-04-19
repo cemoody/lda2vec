@@ -1,4 +1,5 @@
 import numpy as np
+import grequests
 
 
 def _softmax(x):
@@ -103,3 +104,22 @@ def print_top_words_per_topic(data, top_n=10, do_print=True):
             print prefix + msg
         msgs.append(msg)
     return msgs
+
+
+def topic_coherence(lists, services=['ca', 'cp', 'cv', 'npmi', 'uci',
+                                     'umass']):
+    """ Requests the topic coherence from AKSW Palmetto
+
+    Arguments
+    ---------
+    lists : list of lists
+        A list of lists with one list of top words for each topic.
+
+    >>> topic_words = [['cake', 'apple', 'banana', 'cherry', 'chocolate']]
+    >>> topic_coherence(topic_words, services=['cv'])
+    [0.5678879445677241]
+    """
+    url = u'http://palmetto.aksw.org/palmetto-webapp/service/{}?words={}'
+    reqs = [url.format(s, '%20'.join(top)) for s in services for top in lists]
+    topic_coherence = grequests.map((grequests.get(r) for r in reqs))
+    return list(float(t.text) for t in topic_coherence)
