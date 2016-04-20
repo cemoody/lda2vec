@@ -3,6 +3,7 @@
 
 # This simple example loads the newsgroups data from sklearn
 # and train an LDA-like model on it
+import os
 import os.path
 import pickle
 import time
@@ -21,23 +22,32 @@ gpu_id = int(os.getenv('CUDA_GPU', 0))
 cuda.get_device(gpu_id).use()
 print "Using GPU " + str(gpu_id)
 
-vocab = pickle.load(open('../data/vocab.pkl', 'r'))
-corpus = pickle.load(open('../data/corpus.pkl', 'r'))
-flattened = np.load("../data/flattened.npy")
-doc_ids = np.load("../data/doc_ids.npy")
+data_dir = os.getenv('data_dir', '../data/')
+fn_vocab = '{data_dir:s}/vocab.pkl'.format(data_dir=data_dir)
+fn_corpus = '{data_dir:s}/corpus.pkl'.format(data_dir=data_dir)
+fn_flatnd = '{data_dir:s}/flattened.npy'.format(data_dir=data_dir)
+fn_docids = '{data_dir:s}/flattened.npy'.format(data_dir=data_dir)
+vocab = pickle.load(open(fn_vocab, 'r'))
+corpus = pickle.load(open(fn_corpus, 'r'))
+flattened = np.load(fn_flatnd)
+doc_ids = np.load(fn_docids)
 
 # Model Parameters
 # Number of documents
 n_docs = doc_ids.max() + 1
 # Number of unique words in the vocabulary
 n_vocab = flattened.max() + 1
-# Number of dimensions in a single word vector
-n_units = 256
 # 'Strength' of the dircihlet prior; 200.0 seems to work well
 clambda = 200.0
 # Number of topics to fit
-n_topics = 20
+n_topics = int(os.getenv('n_topics', 20))
 batchsize = 4096
+# Power for neg sampling
+power = float(os.getenv('power', 0.75))
+# Intialize with pretrained word vectors
+pretrained = bool(os.getenv('pretrained', True))
+# Number of dimensions in a single word vector
+n_units = int(os.getenv('n_units', 300))
 # Get the string representation for every compact key
 words = corpus.word_list(vocab)[:n_vocab]
 # How many tokens are in each document
@@ -51,7 +61,7 @@ term_frequency[tok_idx] = freq
 
 model = LDA2Vec(n_documents=n_docs, n_document_topics=n_topics,
                 n_units=n_units, n_vocab=n_vocab, counts=term_frequency,
-                n_samples=15)
+                n_samples=15, power=power)
 if os.path.exists('lda2vec.hdf5'):
     print "Reloading from saved"
     serializers.load_hdf5("lda2vec.hdf5", model)

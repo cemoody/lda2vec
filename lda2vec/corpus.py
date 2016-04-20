@@ -1,5 +1,6 @@
 from collections import defaultdict
 import numpy as np
+import difflib
 
 
 class Corpus():
@@ -473,8 +474,9 @@ class Corpus():
             words.append(string)
         return words
 
-    def compact_word_vectors(self, vocab, array=None):
-        """ Retrieve pretrained SpaCy word spectors for our vocabulary.
+    def compact_word_vectors(self, vocab, filename=None, array=None,
+                             use_spacy=True):
+        """ Retrieve pretrained word spectors for our vocabulary.
         The returned word array has row indices corresponding to the
         compact index of a word, and columns correponding to the word
         vector.
@@ -484,6 +486,13 @@ class Corpus():
         vocab : dict
             Dictionary where keys are the loose index, and values are
             the word string.
+
+        use_spacy : bool
+            Use SpaCy to load in word vectors. Otherwise Gensim.
+
+        filename : str
+            Filename for SpaCy-compatible word vectors or if use_spacy=False
+            then uses word2vec vectors via gensim.
 
         Returns
         -------
@@ -502,7 +511,7 @@ class Corpus():
         >>> corpus = Corpus()
         >>> corpus.update_word_count(word_indices)
         >>> corpus.finalize()
-        >>> v = corpus.compact_word_vectors(vocab)
+        >>> v, s, f = corpus.compact_word_vectors(vocab)
         >>> sim = lambda x, y: np.dot(x, y) / nl.norm(x) / nl.norm(y)
         >>> vocab[corpus.compact_to_loose[2]]
         'shuttle'
@@ -515,31 +524,68 @@ class Corpus():
         >>> sim_shuttle_astro > sim_shuttle_cold
         True
         """
-        import spacy.en
-        nlp = spacy.en.English()
-        data = None
+        if use_spacy:
+            import spacy.en
+            nlp = spacy.en.English()
+            if filename:
+                nlp.vocab.load_vectors(filename)
+            n_dim = nlp.vocab.vectors_length
+        else:
+            from gensim.models.word2vec import Word2Vec
+            model = Word2Vec.load_word2vec_format(filename, binary=True)
+            n_dim = model.syn0.shape[1]
         n_words = len(self.compact_to_loose)
-        if array:
+        data = np.random.randn((n_words, n_dim), dtype='float32')
+        if not use_spacy:
+            data -= model.syn0.mean()
+            data /= data.std()
+            data *= model.syn0.std()
+        if array is not None:
             data = array
             n_words = data.shape[0]
+        s, f = 0, 0
         for compact, loose in self.compact_to_loose.items():
             word = vocab.get(loose, None)
             if compact >= n_words:
                 continue
             if word is None:
                 continue
-            tokens = nlp(unicode(word))
-            if not len(tokens) == 1:
-                continue
-            token, = tokens
-            if not token.has_vector:
-                continue
-            vector = token.vector
-            if data is None:
-                n_dim = vector.shape[0]
-                data = np.zeros((n_words, n_dim), dtype='float32')
+            word = word.strip()
+            if use_spacy:
+                token = nlp.vocab[unicode(word)]
+                if not token.has_vector:
+                    token = nlp.vocab[unicode(word.replace(' ', '_'))]
+                if not token.has_vector:
+                    f += 1
+                    if f > 30:
+                        print token.orth_
+                    continue
+                vector = token.vector
+            else:
+                vector = None
+                try:
+                    vector = model[word]
+                except KeyError:
+                    pass
+                if vector is None:
+                    try:
+                        vector = model[word.replace(' ', '_')]
+                    except KeyError:
+                        pass
+                if vector is None:
+                    choices = model.vocab.keys()
+                    try:
+                        choice = difflib.get_close_matches(word, choices)[0]
+                        vector = model[choice]
+                        print word, ' --> ', choice
+                    except IndexError:
+                        pass
+                if vector is None:
+                    f += 1
+                    continue
+            s += 1
             data[compact, :] = vector[:]
-        return data
+        return data, s, f
 
     def compact_to_bow(self, word_compact, max_compact_index=None):
         """ Given a 2D array of compact indices, return the bag of words

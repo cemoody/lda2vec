@@ -12,12 +12,14 @@ import numpy as np
 class LDA2Vec(Chain):
     def __init__(self, n_documents=100, n_document_topics=10,
                  n_units=256, n_vocab=1000, dropout_ratio=0.5, train=True,
-                 counts=None, n_samples=15, word_dropout_ratio=0.0):
+                 counts=None, n_samples=15, word_dropout_ratio=0.0,
+                 power=0.75):
         em = EmbedMixture(n_documents, n_document_topics, n_units,
                           dropout_ratio=dropout_ratio)
         kwargs = {}
         kwargs['mixture'] = em
-        kwargs['sampler'] = L.NegativeSampling(n_units, counts, n_samples)
+        kwargs['sampler'] = L.NegativeSampling(n_units, counts, n_samples,
+                                               power=power)
         super(LDA2Vec, self).__init__(**kwargs)
         rand = np.random.random(self.sampler.W.data.shape)
         self.sampler.W.data[:, :] = rand[:, :]
@@ -31,12 +33,16 @@ class LDA2Vec(Chain):
         dl1 = dirichlet_likelihood(self.mixture.weights)
         return dl1
 
-    def fit_partial(self, rdoc_ids, rword_indices, window=5):
+    def fit_partial(self, rdoc_ids, rword_indices, window=5,
+                    update_only_docs=False):
         doc_ids, word_indices = move(self.xp, rdoc_ids, rword_indices)
         pivot_idx = next(move(self.xp, rword_indices[window: -window]))
         pivot = F.embed_id(pivot_idx, self.sampler.W)
+        if update_only_docs:
+            pivot.unchain_backward()
         doc_at_pivot = rdoc_ids[window: -window]
-        doc = self.mixture(next(move(self.xp, doc_at_pivot)))
+        doc = self.mixture(next(move(self.xp, doc_at_pivot)),
+                           update_only_docs=update_only_docs)
         loss = 0.0
         start, end = window, rword_indices.shape[0] - window
         context = (F.dropout(doc, self.dropout_ratio) +
@@ -59,4 +65,7 @@ class LDA2Vec(Chain):
             target, = move(self.xp, targetidx)
             loss = self.sampler(context, target)
             loss.backward()
+            if update_only_docs:
+                # Wipe out any gradient accumulation on word vectors
+                self.sampler.W.grad *= 0.0
         return loss.data

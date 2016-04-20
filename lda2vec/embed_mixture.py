@@ -72,7 +72,7 @@ class EmbedMixture(chainer.Chain):
             factors=L.Parameter(factors))
         self.weights.W.data[...] /= np.sqrt(n_documents + n_topics)
 
-    def __call__(self, doc_ids):
+    def __call__(self, doc_ids, update_only_docs=False):
         """ Given an array of document integer indices, returns a vector
         for each document. The vector is composed of topic weights projected
         onto topic vectors.
@@ -89,6 +89,8 @@ class EmbedMixture(chainer.Chain):
         proportions = self.proportions(doc_ids, softmax=True)
         # (batchsize, n_factors) * (n_factors, n_dim) --> (batchsize, n_dim)
         factors = F.dropout(self.factors(), ratio=self.dropout_ratio)
+        if update_only_docs:
+            factors.unchain_backward()
         w_sum = F.matmul(proportions, factors)
         return w_sum
 
