@@ -1,6 +1,7 @@
 from collections import defaultdict
 import numpy as np
 import difflib
+from pyxdameraulevenshtein import damerau_levenshtein_distance_withNPArray
 
 
 class Corpus():
@@ -524,6 +525,7 @@ class Corpus():
         >>> sim_shuttle_astro > sim_shuttle_cold
         True
         """
+        n_words = len(self.compact_to_loose)
         if use_spacy:
             import spacy.en
             nlp = spacy.en.English()
@@ -534,15 +536,20 @@ class Corpus():
             from gensim.models.word2vec import Word2Vec
             model = Word2Vec.load_word2vec_format(filename, binary=True)
             n_dim = model.syn0.shape[1]
-        n_words = len(self.compact_to_loose)
-        data = np.random.randn((n_words, n_dim), dtype='float32')
+        data = np.random.normal(size=(n_words, n_dim)).astype('float32')
         if not use_spacy:
-            data -= model.syn0.mean()
+            data -= data.mean()
+            data += model.syn0.mean()
             data /= data.std()
             data *= model.syn0.std()
         if array is not None:
             data = array
             n_words = data.shape[0]
+        keys_raw = model.vocab.keys()
+        keys = [s.encode('ascii', 'ignore') for s in keys_raw]
+        lens = [len(s) for s in model.vocab.keys()]
+        choices = np.array(keys, dtype='S')
+        lengths = np.array(lens, dtype='int32')
         s, f = 0, 0
         for compact, loose in self.compact_to_loose.items():
             word = vocab.get(loose, None)
@@ -573,9 +580,14 @@ class Corpus():
                     except KeyError:
                         pass
                 if vector is None:
-                    choices = model.vocab.keys()
                     try:
-                        choice = difflib.get_close_matches(word, choices)[0]
+                        word = unicode(word)
+                        idx = lengths >= len(word) - 1
+                        idx &= lengths <= len(word) + 1
+                        sel = choices[idx]
+                        d = damerau_levenshtein_distance_withNPArray(word, sel)
+                        choice = np.array(keys_raw)[idx][np.argmin(d)]
+                        # choice = difflib.get_close_matches(word, choices)[0]
                         vector = model[choice]
                         print word, ' --> ', choice
                     except IndexError:

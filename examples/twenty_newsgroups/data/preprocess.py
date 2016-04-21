@@ -52,7 +52,6 @@ flattened, (doc_ids,) = corpus.compact_to_flat(pruned, doc_ids)
 assert flattened.min() >= 0
 # Fill in the pretrained word vectors
 n_dim = 300
-vectors = np.random.randn((flattened.max() + 1, n_dim)) * 0.1331
 fn_wordvc = 'GoogleNews-vectors-negative300.bin'
 vectors, s, f = corpus.compact_word_vectors(vocab, filename=fn_wordvc,
                                             use_spacy=False)

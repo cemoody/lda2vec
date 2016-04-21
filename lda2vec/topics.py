@@ -95,15 +95,16 @@ def print_top_words_per_topic(data, top_n=10, do_print=True):
         `prepare_topics`.
     """
     msgs = []
+    lists = []
     for j, topic_to_word in enumerate(data['topic_term_dists']):
         top = np.argsort(topic_to_word)[::-1][:top_n]
         prefix = "Top words in topic %i " % j
-        msg = ' '.join([data['vocab'][i].strip().replace(' ', '_')
-                        for i in top])
+        top_words = [data['vocab'][i].strip().replace(' ', '_') for i in top]
+        msg = ' '.join(top_words)
         if do_print:
             print prefix + msg
-        msgs.append(msg)
-    return msgs
+        lists.append(top_words)
+    return lists
 
 
 def topic_coherence(lists, services=['ca', 'cp', 'cv', 'npmi', 'uci',
@@ -117,9 +118,13 @@ def topic_coherence(lists, services=['ca', 'cp', 'cv', 'npmi', 'uci',
 
     >>> topic_words = [['cake', 'apple', 'banana', 'cherry', 'chocolate']]
     >>> topic_coherence(topic_words, services=['cv'])
-    [0.5678879445677241]
+    {(0, 'cv'): 0.5678879445677241}
     """
     url = u'http://palmetto.aksw.org/palmetto-webapp/service/{}?words={}'
     reqs = [url.format(s, '%20'.join(top)) for s in services for top in lists]
+    args = [(s, top) for s in services for top in lists]
     topic_coherence = grequests.map((grequests.get(r) for r in reqs))
-    return list(float(t.text) for t in topic_coherence)
+    ans = {}
+    for j, ((s, t), tc) in enumerate(zip(args, topic_coherence)):
+        ans[(j, s)] = float(tc.text)
+    return ans

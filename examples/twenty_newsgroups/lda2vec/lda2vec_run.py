@@ -7,6 +7,7 @@ import os
 import os.path
 import pickle
 import time
+import shelve
 
 import chainer
 from chainer import cuda
@@ -59,6 +60,10 @@ tok_idx, freq = np.unique(flattened, return_counts=True)
 term_frequency = np.zeros(n_vocab, dtype='int32')
 term_frequency[tok_idx] = freq
 
+for name, val in locals().items():
+    if type(val) in (float, int, str):
+        print name, val
+
 model = LDA2Vec(n_documents=n_docs, n_document_topics=n_topics,
                 n_units=n_units, n_vocab=n_vocab, counts=term_frequency,
                 n_samples=15, power=power)
@@ -74,12 +79,18 @@ optimizer.add_hook(clip)
 j = 0
 epoch = 0
 fraction = batchsize * 1.0 / flattened.shape[0]
+progress = shelve.open('progress.shelve')
 for epoch in range(5000):
     data = prepare_topics(cuda.to_cpu(model.mixture.weights.W.data).copy(),
                           cuda.to_cpu(model.mixture.factors.W.data).copy(),
                           cuda.to_cpu(model.sampler.W.data).copy(),
                           words)
-    print_top_words_per_topic(data)
+    top_words = print_top_words_per_topic(data)
+    coherence = topics.topic_coherence(top_words)
+    for j in range(n_topics):
+        print j, coherence[(j, 'cv')]
+    progress[epoch] = dict(top_words=top_words, coherence=coherence,
+                           epoch=epoch)
     data['doc_lengths'] = doc_lengths
     data['term_frequency'] = term_frequency
     np.savez('topics.pyldavis', **data)
