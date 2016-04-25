@@ -13,6 +13,8 @@ from lda2vec import preprocess, Corpus
 
 logging.basicConfig()
 
+extract_vectors = False
+
 # Fetch data
 remove = ('headers', 'footers', 'quotes')
 texts = fetch_20newsgroups(subset='train', remove=remove).data
@@ -52,10 +54,22 @@ flattened, (doc_ids,) = corpus.compact_to_flat(pruned, doc_ids)
 assert flattened.min() >= 0
 # Fill in the pretrained word vectors
 n_dim = 300
-vectors = np.random.randn((flattened.max() + 1, n_dim)) * 0.1331
 fn_wordvc = 'GoogleNews-vectors-negative300.bin'
-vectors, s, f = corpus.compact_word_vectors(vocab, filename=fn_wordvc,
-                                            use_spacy=False)
+if extract_vectors:
+    vectors = np.random.random(size=(flattened.max() + 1, n_dim)) * 0.1331
+    vectors, s, f = corpus.compact_word_vectors(vocab, filename=fn_wordvc,
+                                                use_spacy=False)
+# Create the coocurrences
+cooc = corpus.flat_to_coocurrence(flattened, {'doc_ids': doc_ids})
+# Create a field that keeps the total number of times we've seen
+# token x, token y, and the document
+for key in ['doc_ids', 'word_index_x', 'word_index_y']:
+    cooc = cooc.merge(cooc.groupby(key)['counts']
+                          .sum()
+                          .to_frame()
+                          .reset_index()
+                          .rename(columns={'counts': ('cnt_' + key)}),
+                      on=key)
 # Save all of the preprocessed files
 pickle.dump(vocab, open('vocab.pkl', 'w'))
 pickle.dump(corpus, open('corpus.pkl', 'w'))
@@ -63,4 +77,6 @@ np.save("flattened", flattened)
 np.save("doc_ids", doc_ids)
 np.save("pruned", pruned)
 np.save("bow", bow)
-np.save("vectors", vectors)
+cooc.to_pickle("coocurrence.pd")
+if extract_vectors:
+    np.save("vectors", vectors)

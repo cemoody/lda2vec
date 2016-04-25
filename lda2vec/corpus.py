@@ -628,13 +628,13 @@ class Corpus():
         bow = np.apply_along_axis(bincount, axis, word_compact)
         return bow
 
-    def compact_to_coocurrence(self, word_compact, indices, window_size=10):
-        """ From an array of compact tokens and aligned array of document indices
+    def flat_to_coocurrence(self, word_flat, indices, window_size=10):
+        """ From an array of flat tokens and aligned array of document indices
         compute (word, word, document) co-occurrences within a moving window.
 
         Arguments
         ---------
-        word_compact: int array
+        word_flat: int array
         Sequence of tokens.
 
         indices: dict of int arrays
@@ -652,18 +652,18 @@ class Corpus():
         one extra column for each document index, and a final column for counts
         in that key.
 
-        >>> compact = np.array([0, 1, 1, 1, 2, 2, 3, 0])
+        >>> flat = np.array([0, 1, 1, 1, 2, 2, 3, 0])
         >>> doc_idx = np.array([0, 0, 0, 0, 1, 1, 1, 1])
         >>> corpus = Corpus()
-        >>> counts = corpus.compact_to_coocurrence(compact, {'doc': doc_idx})
+        >>> counts = corpus.flat_to_coocurrence(flat, {'doc': doc_idx})
         >>> counts.counts.sum()
         24
         >>> counts.query('doc == 0').counts.values
         array([3, 3, 6])
-        >>> compact = np.array([0, 1, 1, 1, 2, 2, 3, 0])
+        >>> flat = np.array([0, 1, 1, 1, 2, 2, 3, 0])
         >>> doc_idx = np.array([0, 0, 0, 1, 1, 2, 2, 2])
         >>> corpus = Corpus()
-        >>> counts = corpus.compact_to_coocurrence(compact, {'doc': doc_idx})
+        >>> counts = corpus.flat_to_coocurrence(flat, {'doc': doc_idx})
         >>> counts.counts.sum()
         14
         >>> counts.query('doc == 0').word_index_x.values
@@ -675,7 +675,7 @@ class Corpus():
         >>> counts.query('doc == 1').counts.values
         array([1, 1])
         """
-        tokens = pd.DataFrame(dict(word_index=word_compact)).reset_index()
+        tokens = pd.DataFrame(dict(word_index=word_flat)).reset_index()
         for name, index in indices.items():
             tokens[name] = index
         a, b = tokens.copy(), tokens.copy()
