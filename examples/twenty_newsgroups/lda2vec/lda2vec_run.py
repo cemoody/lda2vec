@@ -16,7 +16,7 @@ import chainer.optimizers as O
 import numpy as np
 
 from lda2vec import utils
-from lda2vec import prepare_topics, print_top_words_per_topic
+from lda2vec import prepare_topics, print_top_words_per_topic, topic_coherence
 from lda2vec_model import LDA2Vec
 
 gpu_id = int(os.getenv('CUDA_GPU', 0))
@@ -27,11 +27,13 @@ data_dir = os.getenv('data_dir', '../data/')
 fn_vocab = '{data_dir:s}/vocab.pkl'.format(data_dir=data_dir)
 fn_corpus = '{data_dir:s}/corpus.pkl'.format(data_dir=data_dir)
 fn_flatnd = '{data_dir:s}/flattened.npy'.format(data_dir=data_dir)
-fn_docids = '{data_dir:s}/flattened.npy'.format(data_dir=data_dir)
+fn_docids = '{data_dir:s}/doc_ids.npy'.format(data_dir=data_dir)
+fn_vectors = '{data_dir:s}/vectors.npy'.format(data_dir=data_dir)
 vocab = pickle.load(open(fn_vocab, 'r'))
 corpus = pickle.load(open(fn_corpus, 'r'))
 flattened = np.load(fn_flatnd)
 doc_ids = np.load(fn_docids)
+vectors = np.load(fn_vectors)
 
 # Model Parameters
 # Number of documents
@@ -46,7 +48,7 @@ batchsize = 4096
 # Power for neg sampling
 power = float(os.getenv('power', 0.75))
 # Intialize with pretrained word vectors
-pretrained = bool(os.getenv('pretrained', True))
+pretrained = bool(int(os.getenv('pretrained', True)))
 # Number of dimensions in a single word vector
 n_units = int(os.getenv('n_units', 300))
 # Get the string representation for every compact key
@@ -60,9 +62,10 @@ tok_idx, freq = np.unique(flattened, return_counts=True)
 term_frequency = np.zeros(n_vocab, dtype='int32')
 term_frequency[tok_idx] = freq
 
-for name, val in locals().items():
-    if type(val) in (float, int, str):
-        print name, val
+for key in sorted(locals().keys()):
+    val = locals()[key]
+    if len(str(val)) < 100 and '<' not in str(val):
+        print key, val
 
 model = LDA2Vec(n_documents=n_docs, n_document_topics=n_topics,
                 n_units=n_units, n_vocab=n_vocab, counts=term_frequency,
@@ -70,6 +73,8 @@ model = LDA2Vec(n_documents=n_docs, n_document_topics=n_topics,
 if os.path.exists('lda2vec.hdf5'):
     print "Reloading from saved"
     serializers.load_hdf5("lda2vec.hdf5", model)
+if pretrained:
+    model.sampler.W.data[:, :] = vectors[:n_vocab, :]
 model.to_gpu()
 optimizer = O.Adam()
 optimizer.setup(model)
@@ -80,17 +85,17 @@ j = 0
 epoch = 0
 fraction = batchsize * 1.0 / flattened.shape[0]
 progress = shelve.open('progress.shelve')
-for epoch in range(5000):
+for epoch in range(200):
     data = prepare_topics(cuda.to_cpu(model.mixture.weights.W.data).copy(),
                           cuda.to_cpu(model.mixture.factors.W.data).copy(),
                           cuda.to_cpu(model.sampler.W.data).copy(),
                           words)
     top_words = print_top_words_per_topic(data)
-    coherence = topics.topic_coherence(top_words)
+    coherence = topic_coherence(top_words)
     for j in range(n_topics):
         print j, coherence[(j, 'cv')]
-    progress[epoch] = dict(top_words=top_words, coherence=coherence,
-                           epoch=epoch)
+    kw = dict(top_words=top_words, coherence=coherence, epoch=epoch)
+    progress[str(epoch)] = pickle.dumps(kw)
     data['doc_lengths'] = doc_lengths
     data['term_frequency'] = term_frequency
     np.savez('topics.pyldavis', **data)

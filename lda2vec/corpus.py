@@ -476,7 +476,7 @@ class Corpus():
         return words
 
     def compact_word_vectors(self, vocab, filename=None, array=None,
-                             use_spacy=True):
+                             top=20000):
         """ Retrieve pretrained word spectors for our vocabulary.
         The returned word array has row indices corresponding to the
         compact index of a word, and columns correponding to the word
@@ -526,22 +526,14 @@ class Corpus():
         True
         """
         n_words = len(self.compact_to_loose)
-        if use_spacy:
-            import spacy.en
-            nlp = spacy.en.English()
-            if filename:
-                nlp.vocab.load_vectors(filename)
-            n_dim = nlp.vocab.vectors_length
-        else:
-            from gensim.models.word2vec import Word2Vec
-            model = Word2Vec.load_word2vec_format(filename, binary=True)
-            n_dim = model.syn0.shape[1]
+        from gensim.models.word2vec import Word2Vec
+        model = Word2Vec.load_word2vec_format(filename, binary=True)
+        n_dim = model.syn0.shape[1]
         data = np.random.normal(size=(n_words, n_dim)).astype('float32')
-        if not use_spacy:
-            data -= data.mean()
-            data += model.syn0.mean()
-            data /= data.std()
-            data *= model.syn0.std()
+        data -= data.mean()
+        data += model.syn0.mean()
+        data /= data.std()
+        data *= model.syn0.std()
         if array is not None:
             data = array
             n_words = data.shape[0]
@@ -551,50 +543,40 @@ class Corpus():
         choices = np.array(keys, dtype='S')
         lengths = np.array(lens, dtype='int32')
         s, f = 0, 0
-        for compact, loose in self.compact_to_loose.items():
-            word = vocab.get(loose, None)
-            if compact >= n_words:
+        rep0 = lambda w: w
+        rep1 = lambda w: w.replace(' ', '_')
+        rep2 = lambda w: w.title().replace(' ', '_')
+        reps = [rep0, rep1, rep2]
+        for compact in np.arange(top):
+            loose = self.compact_to_loose.get(compact, None)
+            if loose is None:
                 continue
+            word = vocab.get(loose, None)
             if word is None:
                 continue
             word = word.strip()
-            if use_spacy:
-                token = nlp.vocab[unicode(word)]
-                if not token.has_vector:
-                    token = nlp.vocab[unicode(word.replace(' ', '_'))]
-                if not token.has_vector:
-                    f += 1
-                    if f > 30:
-                        print token.orth_
-                    continue
-                vector = token.vector
-            else:
-                vector = None
+            vector = None
+            for rep in reps:
+                clean = rep(word)
+                if clean in model.vocab:
+                    vector = model[clean]
+                    break
+            if vector is None:
                 try:
-                    vector = model[word]
-                except KeyError:
+                    word = unicode(word)
+                    idx = lengths >= len(word) - 3
+                    idx &= lengths <= len(word) + 3
+                    sel = choices[idx]
+                    d = damerau_levenshtein_distance_withNPArray(word, sel)
+                    choice = np.array(keys_raw)[idx][np.argmin(d)]
+                    # choice = difflib.get_close_matches(word, choices)[0]
+                    vector = model[choice]
+                    print compact, word, ' --> ', choice
+                except IndexError:
                     pass
-                if vector is None:
-                    try:
-                        vector = model[word.replace(' ', '_')]
-                    except KeyError:
-                        pass
-                if vector is None:
-                    try:
-                        word = unicode(word)
-                        idx = lengths >= len(word) - 1
-                        idx &= lengths <= len(word) + 1
-                        sel = choices[idx]
-                        d = damerau_levenshtein_distance_withNPArray(word, sel)
-                        choice = np.array(keys_raw)[idx][np.argmin(d)]
-                        # choice = difflib.get_close_matches(word, choices)[0]
-                        vector = model[choice]
-                        print word, ' --> ', choice
-                    except IndexError:
-                        pass
-                if vector is None:
-                    f += 1
-                    continue
+            if vector is None:
+                f += 1
+                continue
             s += 1
             data[compact, :] = vector[:]
         return data, s, f

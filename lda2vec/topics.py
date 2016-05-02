@@ -1,5 +1,6 @@
 import numpy as np
-import grequests
+import requests
+import multiprocessing
 
 
 def _softmax(x):
@@ -107,6 +108,15 @@ def print_top_words_per_topic(data, top_n=10, do_print=True):
     return lists
 
 
+def get_request(url):
+    for _ in range(5):
+        try:
+            return float(requests.get(url).text)
+        except:
+            pass
+    return None
+
+
 def topic_coherence(lists, services=['ca', 'cp', 'cv', 'npmi', 'uci',
                                      'umass']):
     """ Requests the topic coherence from AKSW Palmetto
@@ -121,10 +131,15 @@ def topic_coherence(lists, services=['ca', 'cp', 'cv', 'npmi', 'uci',
     {(0, 'cv'): 0.5678879445677241}
     """
     url = u'http://palmetto.aksw.org/palmetto-webapp/service/{}?words={}'
-    reqs = [url.format(s, '%20'.join(top)) for s in services for top in lists]
-    args = [(s, top) for s in services for top in lists]
-    topic_coherence = grequests.map((grequests.get(r) for r in reqs))
+    reqs = [url.format(s, '%20'.join(top[:10])) for s in services for top in lists]
+    pool = multiprocessing.Pool()
+    coherences = pool.map(get_request, reqs)
+    pool.close()
+    pool.terminate()
+    pool.join()
+    del pool
+    args = [(j, s, top) for s in services for j, top in enumerate(lists)]
     ans = {}
-    for j, ((s, t), tc) in enumerate(zip(args, topic_coherence)):
-        ans[(j, s)] = float(tc.text)
+    for ((j, s, t), tc) in zip(args, coherences):
+        ans[(j, s)] = tc
     return ans

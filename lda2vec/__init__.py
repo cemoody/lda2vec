@@ -14,3 +14,4 @@ Corpus = corpus.Corpus
 prepare_topics = topics.prepare_topics
 print_top_words_per_topic = topics.print_top_words_per_topic
 negative_sampling = negative_sampling.negative_sampling
+topic_coherence = topics.topic_coherence
