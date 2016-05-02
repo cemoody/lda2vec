@@ -1,7 +1,12 @@
 from collections import defaultdict
 import numpy as np
 import difflib
-from pyxdameraulevenshtein import damerau_levenshtein_distance_withNPArray
+import pandas as pd
+
+try:
+    from pyxdameraulevenshtein import damerau_levenshtein_distance_withNPArray
+except ImportError:
+    pass
 
 
 class Corpus():
@@ -620,6 +625,82 @@ class Corpus():
         axis = len(word_compact.shape) - 1
         bow = np.apply_along_axis(bincount, axis, word_compact)
         return bow
+
+    def compact_to_coocurrence(self, word_compact, indices, window_size=10):
+        """ From an array of compact tokens and aligned array of document indices
+        compute (word, word, document) co-occurrences within a moving window.
+
+        Arguments
+        ---------
+        word_compact: int array
+        Sequence of tokens.
+
+        indices: dict of int arrays
+        Each array in this dictionary should represent the document index it
+        came from.
+
+        window_size: int
+        Indicates the moving window size around which all co-occurrences will
+        be computed.
+
+        Returns
+        -------
+        counts : DataFrame
+        Returns a DataFrame with two columns for word index A and B,
+        one extra column for each document index, and a final column for counts
+        in that key.
+
+        >>> compact = np.array([0, 1, 1, 1, 2, 2, 3, 0])
+        >>> doc_idx = np.array([0, 0, 0, 0, 1, 1, 1, 1])
+        >>> corpus = Corpus()
+        >>> counts = corpus.compact_to_coocurrence(compact, {'doc': doc_idx})
+        >>> counts.counts.sum()
+        24
+        >>> counts.query('doc == 0').counts.values
+        array([3, 3, 6])
+        >>> compact = np.array([0, 1, 1, 1, 2, 2, 3, 0])
+        >>> doc_idx = np.array([0, 0, 0, 1, 1, 2, 2, 2])
+        >>> corpus = Corpus()
+        >>> counts = corpus.compact_to_coocurrence(compact, {'doc': doc_idx})
+        >>> counts.counts.sum()
+        14
+        >>> counts.query('doc == 0').word_index_x.values
+        array([0, 1, 1])
+        >>> counts.query('doc == 0').word_index_y.values
+        array([1, 0, 1])
+        >>> counts.query('doc == 0').counts.values
+        array([2, 2, 2])
+        >>> counts.query('doc == 1').counts.values
+        array([1, 1])
+        """
+        tokens = pd.DataFrame(dict(word_index=word_compact)).reset_index()
+        for name, index in indices.items():
+            tokens[name] = index
+        a, b = tokens.copy(), tokens.copy()
+        mask = lambda x: np.prod([x[k + '_x'] == x[k + '_y']
+                                  for k in indices.keys()], axis=0)
+        group_keys = ['word_index_x', 'word_index_y', ]
+        group_keys += [k + '_x' for k in indices.keys()]
+        total = []
+        a['frame'] = a['index'].copy()
+        for frame in range(-window_size, window_size + 1):
+            if frame == 0:
+                continue
+            b['frame'] = b['index'] + frame
+            matches = (a.merge(b, on='frame')
+                        .assign(same_doc=mask)
+                        .pipe(lambda df: df[df['same_doc'] == 1])
+                        .groupby(group_keys)['frame']
+                        .count()
+                        .reset_index())
+            total.append(matches)
+        counts = (pd.concat(total)
+                    .groupby(group_keys)['frame']
+                    .sum()
+                    .reset_index()
+                    .rename(columns={k + '_x': k for k in indices.keys()})
+                    .rename(columns=dict(frame='counts')))
+        return counts
 
 
 def fast_replace(data, keys, values, skip_checks=False):
