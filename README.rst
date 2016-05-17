@@ -28,12 +28,14 @@ like word2vec. We build a model that builds both word and document
 topics, makes them interpreable,  makes topics over clients, times,
 and documents, and makes them supervised topics.
 
-Warning: this code is a big series of experiments. It's research software,
+*Warning*: this code is a big series of experiments. It's research software,
 and we've tried to make it simple to modify lda2vec and to play around with
 your own custom topic models. However, it's still research software.
 I wouldn't run this in production, Windows, and I'd only use it after you've
 decided both word2vec and LDA are inadequate and you'd like to tinker with your
-own cool models :)
+own cool models :) That said, I don't want to discourage experimentation:
+there's some limited documentation, a modicum of unit tests, and some 
+interactive examples to get you started.
 
 
 Resources
