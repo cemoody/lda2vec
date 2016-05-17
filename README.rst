@@ -16,6 +16,9 @@ lda2vec: Tools for interpreting natural language
 .. image:: https://img.shields.io/twitter/follow/chrisemoody.svg?style=social
     :target: https://twitter.com/intent/follow?screen_name=chrisemoody
 
+.. image:: lda2vec_network_publish_text.gif
+
+
 The lda2vec model tries to mix the best parts of word2vec and LDA
 into a single framework. word2vec captures powerful relationships 
 between words, but the resulting vectors are largely uninterpretable
@@ -24,6 +27,13 @@ interpretable by humans, but doesn't model local word relationships
 like word2vec. We build a model that builds both word and document
 topics, makes them interpreable,  makes topics over clients, times,
 and documents, and makes them supervised topics.
+
+Warning: this code is a big series of experiments. It's research software,
+and we've tried to make it simple to modify lda2vec and to play around with
+your own custom topic models. However, it's still research software.
+I wouldn't run this in production, Windows, and I'd only use it after you've
+decided both word2vec and LDA are inadequate and you'd like to tinker with your
+own cool models :)
 
 
 Resources
