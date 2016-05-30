@@ -40,6 +40,8 @@ interactive examples to get you started.
 
 Resources
 ---------
+See the research paper `Mixing Dirichlet Topic Models and Word Embeddings to Make lda2vec <http://arxiv.org/abs/1605.02019>`_
+
 See this `Jupyter Notebook <http://nbviewer.jupyter.org/github/cemoody/lda2vec/blob/master/examples/twenty_newsgroups/lda2vec/lda2vec.ipynb>`_
 for an example of an end-to-end demonstration.
 
