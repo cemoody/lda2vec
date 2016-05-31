@@ -3,6 +3,7 @@ import numpy as np
 import chainer
 import chainer.links as L
 import chainer.functions as F
+from chainer import Variable
 
 
 def _orthogonal_matrix(shape):
@@ -60,7 +61,8 @@ class EmbedMixture(chainer.Chain):
     .. seealso:: :func:`lda2vec.dirichlet_likelihood`
     """
 
-    def __init__(self, n_documents, n_topics, n_dim, dropout_ratio=0.2):
+    def __init__(self, n_documents, n_topics, n_dim, dropout_ratio=0.2,
+                 temperature=1.0):
         self.n_documents = n_documents
         self.n_topics = n_topics
         self.n_dim = n_dim
@@ -70,6 +72,7 @@ class EmbedMixture(chainer.Chain):
         super(EmbedMixture, self).__init__(
             weights=L.EmbedID(n_documents, n_topics),
             factors=L.Parameter(factors))
+        self.temperature = temperature
         self.weights.W.data[...] /= np.sqrt(n_documents + n_topics)
 
     def __call__(self, doc_ids, update_only_docs=False):
@@ -102,5 +105,13 @@ class EmbedMixture(chainer.Chain):
             doc_weights : chainer.Variable
                 Two dimensional topic weights of each document.
         """
-        w = F.dropout(self.weights(doc_ids), ratio=self.dropout_ratio)
-        return F.softmax(w) if softmax else w
+        w = self.weights(doc_ids)
+        if softmax:
+            size = w.data.shape
+            mask = self.xp.random.random_integers(0, 1, size=size)
+            y = (F.softmax(w * self.temperature) *
+                 Variable(mask.astype('float32')))
+            norm, y = F.broadcast(F.expand_dims(F.sum(y, axis=1), 1), y)
+            return y / (norm + 1e-7)
+        else:
+            return w

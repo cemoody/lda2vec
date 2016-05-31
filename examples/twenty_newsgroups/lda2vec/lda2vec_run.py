@@ -49,6 +49,8 @@ batchsize = 4096
 power = float(os.getenv('power', 0.75))
 # Intialize with pretrained word vectors
 pretrained = bool(int(os.getenv('pretrained', True)))
+# Sampling temperature
+temperature = float(os.getenv('temperature', 1.0))
 # Number of dimensions in a single word vector
 n_units = int(os.getenv('n_units', 300))
 # Get the string representation for every compact key
@@ -69,7 +71,7 @@ for key in sorted(locals().keys()):
 
 model = LDA2Vec(n_documents=n_docs, n_document_topics=n_topics,
                 n_units=n_units, n_vocab=n_vocab, counts=term_frequency,
-                n_samples=15, power=power)
+                n_samples=15, power=power, temperature=temperature)
 if os.path.exists('lda2vec.hdf5'):
     print "Reloading from saved"
     serializers.load_hdf5("lda2vec.hdf5", model)
@@ -91,11 +93,12 @@ for epoch in range(200):
                           cuda.to_cpu(model.sampler.W.data).copy(),
                           words)
     top_words = print_top_words_per_topic(data)
-    coherence = topic_coherence(top_words)
-    for j in range(n_topics):
-        print j, coherence[(j, 'cv')]
-    kw = dict(top_words=top_words, coherence=coherence, epoch=epoch)
-    progress[str(epoch)] = pickle.dumps(kw)
+    if j % 100 == 0 and j > 100:
+        coherence = topic_coherence(top_words)
+        for j in range(n_topics):
+            print j, coherence[(j, 'cv')]
+        kw = dict(top_words=top_words, coherence=coherence, epoch=epoch)
+        progress[str(epoch)] = pickle.dumps(kw)
     data['doc_lengths'] = doc_lengths
     data['term_frequency'] = term_frequency
     np.savez('topics.pyldavis', **data)
