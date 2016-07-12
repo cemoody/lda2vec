@@ -96,6 +96,7 @@ class Corpus():
         """ Get the loose keys in order of decreasing frequency"""
         loose_counts = sorted(self.counts_loose.items(), key=lambda x: x[1],
                               reverse=True)
+        loose_counts = [i for i in loose_counts if i[0] not in self.specials.values()]
         keys = np.array(loose_counts)[:, 0]
         counts = np.array(loose_counts)[:, 1]
         order = np.argsort(counts)[::-1].astype('int32')
@@ -415,7 +416,7 @@ class Corpus():
         self._check_finalized()
         n_docs = word_compact.shape[0]
         max_length = word_compact.shape[1]
-        idx = word_compact > self.n_specials
+        idx = word_compact >= self.n_specials
         components_raveled = []
         msg = "Length of each component must much `word_compact` size"
         for component in components:
@@ -552,7 +553,7 @@ class Corpus():
         rep1 = lambda w: w.replace(' ', '_')
         rep2 = lambda w: w.title().replace(' ', '_')
         reps = [rep0, rep1, rep2]
-        for compact in np.arange(top):
+        for compact in np.arange(min(top, n_words)):
             loose = self.compact_to_loose.get(compact, None)
             if loose is None:
                 continue
