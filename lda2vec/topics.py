@@ -1,3 +1,4 @@
+from __future__ import print_function
 import numpy as np
 import requests
 import multiprocessing
@@ -103,7 +104,7 @@ def print_top_words_per_topic(data, top_n=10, do_print=True):
         top_words = [data['vocab'][i].strip().replace(' ', '_') for i in top]
         msg = ' '.join(top_words)
         if do_print:
-            print prefix + msg
+            print(prefix + msg)
         lists.append(top_words)
     return lists
 
