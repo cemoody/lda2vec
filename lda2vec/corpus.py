@@ -1,6 +1,5 @@
 from collections import defaultdict
 import numpy as np
-import difflib
 import pandas as pd
 
 try:
@@ -531,7 +530,7 @@ class Corpus():
         True
         """
         n_words = len(self.compact_to_loose)
-        from gensim.models.word2vec import Word2Vec
+        import gensim
         model = gensim.models.KeyedVectors.load_word2vec_format(
             filename, binary=True)
 
@@ -579,7 +578,6 @@ class Corpus():
                     sel = choices[idx]
                     d = damerau_levenshtein_distance_withNPArray(word, sel)
                     choice = np.array(keys_raw)[idx][np.argmin(d)]
-                    # choice = difflib.get_close_matches(word, choices)[0]
                     vector = model[choice]
                     print compact, word, ' --> ', choice
                 except IndexError:
