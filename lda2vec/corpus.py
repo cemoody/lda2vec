@@ -532,7 +532,9 @@ class Corpus():
         """
         n_words = len(self.compact_to_loose)
         from gensim.models.word2vec import Word2Vec
-        model = Word2Vec.load_word2vec_format(filename, binary=True)
+        model = gensim.models.KeyedVectors.load_word2vec_format(
+            filename, binary=True)
+
         n_dim = model.syn0.shape[1]
         data = np.random.normal(size=(n_words, n_dim)).astype('float32')
         data -= data.mean()
@@ -548,9 +550,12 @@ class Corpus():
         choices = np.array(keys, dtype='S')
         lengths = np.array(lens, dtype='int32')
         s, f = 0, 0
-        rep0 = lambda w: w
-        rep1 = lambda w: w.replace(' ', '_')
-        rep2 = lambda w: w.title().replace(' ', '_')
+
+        def rep0(w): return w
+
+        def rep1(w): return w.replace(' ', '_')
+
+        def rep2(w): return w.title().replace(' ', '_')
         reps = [rep0, rep1, rep2]
         for compact in np.arange(top):
             loose = self.compact_to_loose.get(compact, None)
@@ -677,8 +682,9 @@ class Corpus():
         for name, index in indices.items():
             tokens[name] = index
         a, b = tokens.copy(), tokens.copy()
-        mask = lambda x: np.prod([x[k + '_x'] == x[k + '_y']
-                                  for k in indices.keys()], axis=0)
+
+        def mask(x): return np.prod([x[k + '_x'] == x[k + '_y']
+                                     for k in indices.keys()], axis=0)
         group_keys = ['word_index_x', 'word_index_y', ]
         group_keys += [k + '_x' for k in indices.keys()]
         total = []
