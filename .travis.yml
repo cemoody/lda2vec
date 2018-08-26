@@ -2,10 +2,6 @@
 
 language: python
 
-env:
-    global:
-        - NUMPY_VERSION=1.10
-
 matrix:
     include:
         # All the versions of Python.
@@ -19,7 +15,7 @@ before_install:
 install:
     - conda create --yes -n testing python=$TRAVIS_PYTHON_VERSION
     - source activate testing
-    - conda install --yes numpy=$NUMPY_VERSION nose pip numba cython scikit-learn h5py
+    - conda install --yes numpy nose pip numba cython scikit-learn h5py libgfortran
     - pip install chainer pytest spacy codecov coveralls  pytest-cov
     - python -m spacy.en.download --force all
     - python setup.py install
