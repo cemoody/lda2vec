@@ -22,7 +22,7 @@ def chunks(n, *args):
     """Yield successive n-sized chunks from l."""
     # From stackoverflow question 312443
     keypoints = []
-    for i in xrange(0, len(args[0]), n):
+    for i in range(0, len(args[0]), n):
         keypoints.append((i, i + n))
     random.shuffle(keypoints)
     for a, b in keypoints:

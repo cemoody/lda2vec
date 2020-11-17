@@ -29,8 +29,8 @@ fn_corpus = '{data_dir:s}/corpus.pkl'.format(data_dir=data_dir)
 fn_flatnd = '{data_dir:s}/flattened.npy'.format(data_dir=data_dir)
 fn_docids = '{data_dir:s}/doc_ids.npy'.format(data_dir=data_dir)
 fn_vectors = '{data_dir:s}/vectors.npy'.format(data_dir=data_dir)
-vocab = pickle.load(open(fn_vocab, 'r'))
-corpus = pickle.load(open(fn_corpus, 'r'))
+vocab = pickle.load(open(fn_vocab, 'rb'))
+corpus = pickle.load(open(fn_corpus, 'rb'))
 flattened = np.load(fn_flatnd)
 doc_ids = np.load(fn_docids)
 vectors = np.load(fn_vectors)
@@ -45,6 +45,8 @@ clambda = 200.0
 # Number of topics to fit
 n_topics = int(os.getenv('n_topics', 20))
 batchsize = 4096
+# Number of epochs
+num_epochs = 200
 # Power for neg sampling
 power = float(os.getenv('power', 0.75))
 # Intialize with pretrained word vectors
@@ -86,39 +88,40 @@ optimizer.add_hook(clip)
 j = 0
 epoch = 0
 fraction = batchsize * 1.0 / flattened.shape[0]
-progress = shelve.open('progress.shelve')
-for epoch in range(200):
-    data = prepare_topics(cuda.to_cpu(model.mixture.weights.W.data).copy(),
-                          cuda.to_cpu(model.mixture.factors.W.data).copy(),
-                          cuda.to_cpu(model.sampler.W.data).copy(),
-                          words)
-    top_words = print_top_words_per_topic(data)
-    if j % 100 == 0 and j > 100:
-        coherence = topic_coherence(top_words)
-        for j in range(n_topics):
-            print(j, coherence[(j, 'cv')])
-        kw = dict(top_words=top_words, coherence=coherence, epoch=epoch)
-        progress[str(epoch)] = pickle.dumps(kw)
-    data['doc_lengths'] = doc_lengths
-    data['term_frequency'] = term_frequency
-    np.savez('topics.pyldavis', **data)
-    for d, f in utils.chunks(batchsize, doc_ids, flattened):
-        t0 = time.time()
-        optimizer.zero_grads()
-        l = model.fit_partial(d.copy(), f.copy())
-        prior = model.prior()
-        loss = prior * fraction
-        loss.backward()
-        optimizer.update()
-        msg = ("J:{j:05d} E:{epoch:05d} L:{loss:1.3e} "
-               "P:{prior:1.3e} R:{rate:1.3e}")
-        prior.to_cpu()
-        loss.to_cpu()
-        t1 = time.time()
-        dt = t1 - t0
-        rate = batchsize / dt
-        logs = dict(loss=float(l), epoch=epoch, j=j,
-                    prior=float(prior.data), rate=rate)
-        print(msg.format(**logs))
-        j += 1
-    serializers.save_hdf5("lda2vec.hdf5", model)
+with shelve.open('progress.shelve') as progress:
+    for epoch in range(num_epochs):
+        data = prepare_topics(cuda.to_cpu(model.mixture.weights.W.data).copy(),
+                            cuda.to_cpu(model.mixture.factors.W.data).copy(),
+                            cuda.to_cpu(model.sampler.W.data).copy(),
+                            words)
+        top_words = print_top_words_per_topic(data)
+        if j % 100 == 0 and j > 100:
+            coherence = topic_coherence(top_words)
+            for j in range(n_topics):
+                print(j, coherence[(j, 'cv')])
+            kw = dict(top_words=top_words, coherence=coherence, epoch=epoch)
+            progress[str(epoch)] = pickle.dumps(kw)
+        data['doc_lengths'] = doc_lengths
+        data['term_frequency'] = term_frequency
+        np.savez('topics.pyldavis', **data)
+        for d, f in utils.chunks(batchsize, doc_ids, flattened):
+            t0 = time.time()
+            model.cleargrads()
+            # optimizer.zero_grads()
+            l = model.fit_partial(d.copy(), f.copy())
+            prior = model.prior()
+            loss = prior * fraction
+            loss.backward()
+            optimizer.update()
+            msg = ("J:{j:05d} E:{epoch:05d} L:{loss:1.3e} "
+                "P:{prior:1.3e} R:{rate:1.3e}")
+            prior.to_cpu()
+            loss.to_cpu()
+            t1 = time.time()
+            dt = t1 - t0
+            rate = batchsize / dt
+            logs = dict(loss=float(l), epoch=epoch, j=j,
+                        prior=float(prior.data), rate=rate)
+            print(msg.format(**logs))
+            j += 1
+        serializers.save_hdf5("lda2vec.hdf5", model)

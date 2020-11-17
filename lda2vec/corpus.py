@@ -3,10 +3,7 @@ import numpy as np
 import difflib
 import pandas as pd
 
-try:
-    from pyxdameraulevenshtein import damerau_levenshtein_distance_withNPArray
-except ImportError:
-    pass
+from pyxdameraulevenshtein import damerau_levenshtein_distance_ndarray
 
 
 class Corpus():
@@ -101,7 +98,7 @@ class Corpus():
         order = np.argsort(counts)[::-1].astype('int32')
         keys, counts = keys[order], counts[order]
         # Add in the specials as a prefix to the other keys
-        specials = np.sort(self.specials.values())
+        specials = np.sort(list(self.specials.values()))
         keys = np.concatenate((specials, keys))
         empty = np.zeros(len(specials), dtype='int32')
         counts = np.concatenate((empty, counts))
@@ -531,8 +528,8 @@ class Corpus():
         True
         """
         n_words = len(self.compact_to_loose)
-        from gensim.models.word2vec import Word2Vec
-        model = Word2Vec.load_word2vec_format(filename, binary=True)
+        from gensim.models import KeyedVectors
+        model = KeyedVectors.load_word2vec_format(filename, binary=True)
         n_dim = model.syn0.shape[1]
         data = np.random.normal(size=(n_words, n_dim)).astype('float32')
         data -= data.mean()
@@ -542,10 +539,9 @@ class Corpus():
         if array is not None:
             data = array
             n_words = data.shape[0]
-        keys_raw = model.vocab.keys()
-        keys = [s.encode('ascii', 'ignore') for s in keys_raw]
+        keys_raw = list(model.vocab.keys())
         lens = [len(s) for s in model.vocab.keys()]
-        choices = np.array(keys, dtype='S')
+        choices = np.array(keys_raw)
         lengths = np.array(lens, dtype='int32')
         s, f = 0, 0
         rep0 = lambda w: w
@@ -568,15 +564,15 @@ class Corpus():
                     break
             if vector is None:
                 try:
-                    word = unicode(word)
+                    # word = unicode(word)
                     idx = lengths >= len(word) - 3
                     idx &= lengths <= len(word) + 3
                     sel = choices[idx]
-                    d = damerau_levenshtein_distance_withNPArray(word, sel)
-                    choice = np.array(keys_raw)[idx][np.argmin(d)]
+                    d = damerau_levenshtein_distance_ndarray(word, sel)
+                    choice = sel[np.argmin(d)]
                     # choice = difflib.get_close_matches(word, choices)[0]
                     vector = model[choice]
-                    print compact, word, ' --> ', choice
+                    print(compact, word, ' --> ', choice)
                 except IndexError:
                     pass
             if vector is None:

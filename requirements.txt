@@ -3,3 +3,10 @@ numpy>=1.10
 spacy>=0.9
 scipy>=0.16.0
 sklearn
+pandas
+matplotlib
+pyldavis
+gensim
+pyxDamerauLevenshtein
+cupy-cuda102>=7.7.0,<8.0.0
+ipykernel

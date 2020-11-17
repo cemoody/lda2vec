@@ -1,7 +1,34 @@
-from spacy.en import English
+from spacy.lang.en import English
 from spacy.attrs import LOWER, LIKE_URL, LIKE_EMAIL
 
 import numpy as np
+
+
+class TokenMapper():
+    def __init__(self, skip):
+        self.skip = skip
+        self.n = 0
+        self.token_mapping = {}
+        self.vocab = {skip: '<SKIP>'}
+
+    def convert_to_new_tokens(self, nlp, dat):
+        dat2 = np.zeros(len(dat), dtype='int32')
+
+        for i in range(len(dat)):
+            if (dat[i, 1] > 0) | (dat[i, 2] > 0):
+                dat2[i] = self.skip
+            else:
+                token = dat[i, 0]
+                new_token = self.token_mapping.get(token)
+                if new_token:
+                    dat2[i] = new_token
+                else:
+                    dat2[i] = self.n
+                    self.token_mapping[token] = self.n
+                    self.vocab[self.n] = nlp.vocab[token].lower_
+                    self.n += 1
+
+        return dat2
 
 
 def tokenize(texts, max_length, skip=-2, attr=LOWER, merge=False, nlp=None,
@@ -66,9 +93,13 @@ def tokenize(texts, max_length, skip=-2, attr=LOWER, merge=False, nlp=None,
     """
     if nlp is None:
         nlp = English()
+
     data = np.zeros((len(texts), max_length), dtype='int32')
     data[:] = skip
     bad_deps = ('amod', 'compound')
+
+    token_mapper = TokenMapper(skip)
+
     for row, doc in enumerate(nlp.pipe(texts, **kwargs)):
         if merge:
             # from the spaCy blog, an example on how to merge
@@ -86,19 +117,16 @@ def tokenize(texts, max_length, skip=-2, attr=LOWER, merge=False, nlp=None,
                     if len(ent) > 1:
                         # Merge them into single tokens
                         ent.merge(ent.root.tag_, ent.text, ent.label_)
-        dat = doc.to_array([attr, LIKE_EMAIL, LIKE_URL]).astype('int32')
+
+        # this is uint64
+        dat = doc.to_array([attr, LIKE_EMAIL, LIKE_URL])
         if len(dat) > 0:
-            dat = dat.astype('int32')
-            msg = "Negative indices reserved for special tokens"
-            assert dat.min() >= 0, msg
-            # Replace email and URL tokens
-            idx = (dat[:, 1] > 0) | (dat[:, 2] > 0)
-            dat[idx] = skip
+            dat = token_mapper.convert_to_new_tokens(nlp, dat)
             length = min(len(dat), max_length)
-            data[row, :length] = dat[:length, 0].ravel()
-    uniques = np.unique(data)
-    vocab = {v: nlp.vocab[v].lower_ for v in uniques if v != skip}
-    vocab[skip] = '<SKIP>'
+            data[row, :length] = dat[:length]
+
+    vocab = token_mapper.vocab
+
     return data, vocab
 
 
