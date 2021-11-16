@@ -19,7 +19,7 @@ While visualizing the feature is similarly straightforward::
 
 Resources
 ---------
-See this `Jupyter Notebook <http://nbviewer.jupyter.org/github/cemoody/lda2vec/blob/master/examples/twenty_newsgroups/lda.ipynb>`_
+See this `Jupyter Notebook <https://github.com/cemoody/lda2vec/blob/master/examples/twenty_newsgroups/lda2vec/lda2vec.ipynb>`_
 for an example of an end-to-end demonstration.
 
 See this `presentation <http://www.slideshare.net/ChristopherMoody3/word2vec-lda-and-introducing-a-new-hybrid-algorithm-lda2vec-57135994>`_
